@@ -405,9 +405,10 @@
 #define SENSOR_ERROR_NOT_READY      10      // Device is not ready / available / disconnected
 #define SENSOR_ERROR_CONFIG         11      // Configuration values were invalid
 #define SENSOR_ERROR_SUPPORT        12      // Not supported
+#define SENSOR_ERROR_NOT_FOUND      13      // Not found
 #define SENSOR_ERROR_OTHER          99      // Any other error
 
-#define SENSOR_ERROR_MAX            13
+#define SENSOR_ERROR_MAX            14
 
 //------------------------------------------------------------------------------
 // OTA Client (not related to the Web OTA support)

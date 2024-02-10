@@ -280,6 +280,9 @@ String error(unsigned char error) {
     case SENSOR_ERROR_SUPPORT:
         result = PSTR("Not Supported");
         break;
+    case SENSOR_ERROR_NOT_FOUND:
+        result = PSTR("Not found");
+        break;
     case SENSOR_ERROR_OTHER:
     default:
         result = PSTR("Other / Unknown Error");
@@ -1743,7 +1746,6 @@ double process(const Magnitude& magnitude, double value) {
 } // namespace
 
 namespace internal {
-namespace {
 
 std::vector<Magnitude> magnitudes;
 bool real_time { sensor::build::realTimeValues() };
@@ -1752,7 +1754,6 @@ using ReadHandlers = std::forward_list<MagnitudeReadHandler>;
 ReadHandlers read_handlers;
 ReadHandlers report_handlers;
 
-} // namespace
 } // namespace internal
 
 size_t count(unsigned char type) {
@@ -1782,6 +1783,15 @@ const Magnitude* find(unsigned char type, unsigned char index) {
     }
 
     return out;
+}
+
+Unit units(size_t index) {
+    return internal::magnitudes[index].units;
+}
+
+unsigned char error(size_t index) {
+    const auto& magnitude = internal::magnitudes[index];
+    return magnitude.sensor->error();
 }
 
 Magnitude& get(size_t index) {
@@ -2086,9 +2096,103 @@ void load() {
 
 #if DALLAS_SUPPORT
     {
-        auto* sensor = new DallasSensor();
-        sensor->setGPIO(DALLAS_PIN);
-        add(sensor);
+        PROGMEM_STRING(Pin, "dallasPin");
+        const auto pin = getSetting(Pin, uint8_t{ DALLAS_PIN });
+
+        PROGMEM_STRING(Parasite, "dallasParasite");
+        const auto parasite = getSetting(Parasite, DALLAS_PARASITE == 1);
+
+        PROGMEM_STRING(Resolution, "dallasResolution");
+        const auto resolution = getSetting(Resolution, uint8_t{ DALLAS_RESOLUTION });
+
+        using namespace espurna::driver;
+        auto port = std::make_shared<onewire::Port>();
+
+        // TODO hybrid mode with an extra pull-up pin?
+        // TODO parasite *can* be detected for DS18X, see
+        // 'DS18B20 .pdf / ROM Commands / Read Power Supply (0xB4)'
+        // > During the read time slot, parasite powered DS18B20s will
+        // > pull the bus low, and externally powered DS18B20s will
+        // > let the bus remain high.
+        // (but, not every DS clone properly implements it)
+        auto error = port->attach(pin, parasite);
+        if (onewire::Error::Ok == error) {
+            using namespace espurna::sensor::driver;
+
+            const auto devices = port->devices();
+            DEBUG_MSG_P(PSTR("[DALLAS] Found %zu device(s) on GPIO%hhu\n"),
+                devices.size(), pin);
+
+            std::vector<const onewire::Device*> filtered;
+            filtered.reserve(devices.size());
+
+            for (auto& device : devices) {
+                filtered.push_back(&device);
+            }
+
+            // Currently known sensor types
+            using Temperature = dallas::temperature::Sensor;
+            using Digital = dallas::temperature::Sensor;
+
+            const auto unknown = std::remove_if(
+                filtered.begin(), filtered.end(),
+                [](const onewire::Device* device) {
+                    if (!Temperature::match(*device)
+                     && !Digital::match(*device))
+                    {
+                        DEBUG_MSG_P(PSTR("[DALLAS] Unknown device %s\n"),
+                            hexEncode(device->address).c_str());
+                        return true;
+                    }
+
+                    return false;
+                });
+            filtered.erase(unknown, filtered.end());
+
+            if (!filtered.size()) {
+                error = onewire::Error::NotFound;
+                goto dallas_end;
+            }
+
+            // Push digital sensors first, temperature sensors last
+            // Making sure temperature sensor always becomes port handler
+            std::sort(
+                filtered.begin(), filtered.end(),
+                [](const onewire::Device* lhs, const onewire::Device*) {
+                    return Digital::match(*lhs);
+                });
+
+            // TODO per-sensor resolution matters much?
+            dallas::temperature::Sensor::setResolution(resolution);
+
+            dallas::internal::Sensor* ptr = nullptr;
+            for (const auto* device : filtered) {
+                if (Temperature::match(*device)) {
+                    ptr = new Temperature(port, *device);
+                } else if (Digital::match(*device)) {
+                    ptr = new Digital(port, *device);
+                } else {
+                    error = onewire::Error::NotFound;
+                    goto dallas_end;
+                }
+
+                sensor::add(ptr);
+            }
+
+            // Since sensor reading order is constant, make sure the
+            // last sensor is handling everything related to the wire.
+            // (also note 'Digital' being pushed to the front above)
+            DEBUG_MSG_P(PSTR("[DALLAS] %s is port handler\n"),
+                hexEncode(ptr->getDeviceAddress()).c_str());
+            ptr->setPortHandler();
+        }
+
+dallas_end:
+        if (onewire::Error::Ok != error) {
+            DEBUG_MSG_P(PSTR("[DALLAS] Could not initialize the sensor - %.*s\n"),
+                espurna::driver::onewire::error(error).length(),
+                espurna::driver::onewire::error(error).data());
+        }
     }
 #endif
 
@@ -3440,10 +3544,10 @@ void magnitudes(JsonObject& root) {
                 magnitude::process(magnitude, magnitude.last)));
         }},
         {STRING_VIEW("units"), [](JsonArray& out, size_t index) {
-            out.add(static_cast<int>(magnitude::get(index).units));
+            out.add(static_cast<int>(magnitude::units(index)));
         }},
         {STRING_VIEW("error"), [](JsonArray& out, size_t index) {
-            out.add(magnitude::get(index).sensor->error());
+            out.add(magnitude::error(index));
         }},
     });
 }
@@ -3869,8 +3973,13 @@ bool init() {
 
     if (out) {
         internal::state = State::Ready;
-        DEBUG_MSG_P(PSTR("[SENSOR] Finished initialization for %zu sensor(s) and %zu magnitude(s)\n"),
-            sensor::count(), magnitude::count());
+
+        if (sensor::count()) {
+            DEBUG_MSG_P(PSTR("[SENSOR] Finished initialization for %zu sensor(s) and %zu magnitude(s)\n"),
+                sensor::count(), magnitude::count());
+        } else {
+            DEBUG_MSG_P(PSTR("[SENSOR] Finished initialization\n"));
+        }
     }
 
     return out;
@@ -3917,10 +4026,6 @@ void tick() {
 void pre() {
     for (auto sensor : internal::sensors) {
         sensor->pre();
-        if (!sensor->status()) {
-            DEBUG_MSG_P(PSTR("[SENSOR] Could not read from %s (%s)\n"),
-                sensor->description().c_str(), error(sensor->error()).c_str());
-        }
     }
 }
 
@@ -3928,6 +4033,18 @@ void post() {
     for (auto sensor : internal::sensors) {
         sensor->post();
     }
+}
+
+void error() {
+#if DEBUG_SUPPORT
+    for (auto sensor : internal::sensors) {
+        if (SENSOR_ERROR_OK != sensor->error()) {
+            DEBUG_MSG_P(PSTR("[SENSOR] Could not read from %s - %s\n"),
+                    sensor->description().c_str(),
+                    error(sensor->error()).c_str());
+        }
+    }
+#endif
 }
 
 void reset_init(duration::Seconds init_interval) {
@@ -3992,26 +4109,28 @@ void loop() {
     sensor::tick();
 
     if (ready_to_read()) {
-        // Pre-read hook, called every reading
-        sensor::pre();
-
         // XXX: Filter out certain magnitude types when relay is turned OFF
 #if RELAY_SUPPORT && SENSOR_POWER_CHECK_STATUS
         const bool relay_off = (relayCount() == 1) && (relayStatus(0) == 0);
 #endif
 
+        // Pre-read hook, called every reading
+        sensor::pre();
+
+        // Notify about sensor errors that may have been updated by pre()
+        sensor::error();
+
         auto value = sensor::ReadValue{};
 
         for (size_t index = 0; index < magnitude::count(); ++index) {
             auto& magnitude = magnitude::get(index);
-            if (!magnitude.sensor->status()) {
+
+            // Do not read anything from a failed sensor
+            if (SENSOR_ERROR_OK != magnitude.sensor->error()) {
                 continue;
             }
 
-            // -------------------------------------------------------------
             // RAW value, returned from the sensor
-            // -------------------------------------------------------------
-
             value.raw = magnitude.sensor->value(magnitude.slot);
 
             // But, completely remove spurious values if relay is OFF
@@ -4040,16 +4159,9 @@ void loop() {
             magnitude.last = value.raw;
             magnitude.filter->update(value.raw);
 
-            // -------------------------------------------------------------
             // Procesing (units and decimals)
-            // -------------------------------------------------------------
-
             value.processed = magnitude::process(magnitude, value.raw);
             magnitude::read(magnitude::value(magnitude, value.processed));
-
-            // -------------------------------------------------------------------
-            // Reporting
-            // -------------------------------------------------------------------
 
             // Initial status or after report counter overflows
             bool report { ready_to_report() };
