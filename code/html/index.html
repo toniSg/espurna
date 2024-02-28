@@ -1578,13 +1578,13 @@
                         <div class="page">
                             <fieldset>
 
-                                <legend>Discovery</legend>
+                                <legend>Integration</legend>
 
                                 <div class="pure-control-group">
                                     <label>Enabled</label>
                                     <div><input type="checkbox" name="haEnabled"></div>
                                     <span class="pure-form-message">
-                                        Home Assistant MQTT discovery. Enable / disable, then save to trigger an update.
+                                        Automatically send Home Assistant MQTT discovery messages on MQTT connection, or when <strong>birth</strong> message is received.
                                     </span>
                                 </div>
 
@@ -1595,6 +1595,7 @@
                                         The prefix for the discovery topic e.g. <code><strong>&lt;prefix&gt;</strong>/switch/espurna-123456/config</code>
                                     </span>
                                 </div>
+
                             </fieldset>
 
                             <fieldset>
@@ -1604,10 +1605,42 @@
                                     <label>Retain</label>
                                     <div><input type="checkbox" name="haRetain"></div>
                                     <span class="pure-form-message">
-                                        Whether to set the <strong>Retain</strong> flag on outgoing MQTT messages.
+                                        Whether to set the <strong>Retain</strong> flag on outgoing MQTT messages. When enabled, discovery messages will be persisted by the broker and will be received even when the device is offline.
                                     </span>
                                 </div>
                             </fieldset>
+
+                            <fieldset>
+                                <legend>Birth</legend>
+
+                                <span class="pure-form-message">
+                                    By default, Home Assistant sends 'online' and 'offline' to <code>homeassistant/status</code>. Instead of sending discovery message only once on connection, publish it every time this <strong>topic</strong> receives the specified <strong>payload</strong>.<br>
+                                    <a href="https://www.home-assistant.io/integrations/mqtt/#birth-and-last-will-messages">See MQTT integration documentation for more information.</a>
+                                </span>
+
+                                <div class="pure-control-group">
+                                    <label>Topic</label>
+                                    <input name="haBirthTopic" type="text">
+                                </div>
+
+                                <div class="pure-control-group">
+                                    <label>Payload</label>
+                                    <input name="haBirthPayload" type="text">
+                                </div>
+                            </fieldset>
+
+                            <fieldset>
+                                <legend>Discovery</legend>
+                                <span class="pure-form-message">
+                                    Manually trigger discovery messages
+                                </span>
+
+                                <div class="pure-control-group">
+                                    <button type="button" class="pure-button button-ha-publish pure-input-1">Publish</button>
+                                    <button type="button" class="pure-button button-ha-clear pure-input-1">Clear</button>
+                                </div>
+                            </fieldset>
+
                         </div>
 
                     </div>

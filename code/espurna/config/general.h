@@ -1252,7 +1252,10 @@
 #endif
 
 #ifndef HOMEASSISTANT_ENABLED
-#define HOMEASSISTANT_ENABLED   0               // Integration not enabled by default
+#define HOMEASSISTANT_ENABLED   0               // Enable automatic discovery messages when
+                                                // - if BIRTH topic is empty, when device connects
+                                                // - if BIRTH topic is not empty, when device receives specified BIRTH PAYLOAD
+                                                // (disabled by default, only manually triggered messages work)
 #endif
 
 #ifndef HOMEASSISTANT_PREFIX
@@ -1261,6 +1264,15 @@
 
 #ifndef HOMEASSISTANT_RETAIN
 #define HOMEASSISTANT_RETAIN    MQTT_RETAIN     // Make broker retain the messages
+#endif
+
+#ifndef HOMEASSISTANT_BIRTH_TOPIC
+#define HOMEASSISTANT_BIRTH_TOPIC       ""      // HA instance 'birth' message topic
+                                                // If not empty, discovery is sent ONLY when the exact PAYLOAD message is received by the device
+#endif
+
+#ifndef HOMEASSISTANT_BIRTH_PAYLOAD
+#define HOMEASSISTANT_BIRTH_PAYLOAD     "online"        // Payload for the 'birth' message from HA
 #endif
 
 // -----------------------------------------------------------------------------

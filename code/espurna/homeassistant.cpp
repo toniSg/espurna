@@ -19,6 +19,7 @@ Copyright (C) 2019-2022 by Maxim Prokhorov <prokhorov dot max at outlook dot com
 #include "mqtt.h"
 #include "relay.h"
 #include "sensor.h"
+#include "web.h"
 #include "ws.h"
 
 #include <ArduinoJson.h>
@@ -30,7 +31,16 @@ namespace espurna {
 namespace homeassistant {
 namespace {
 
+enum class State {
+    Disabled,
+    Enabled,
+};
+
 namespace build {
+
+constexpr bool enabled() {
+    return 1 == HOMEASSISTANT_ENABLED;
+}
 
 PROGMEM_STRING(Prefix, HOMEASSISTANT_PREFIX);
 
@@ -38,12 +48,20 @@ constexpr StringView prefix() {
     return Prefix;
 }
 
-constexpr bool enabled() {
-    return 1 == HOMEASSISTANT_ENABLED;
-}
-
 constexpr bool retain() {
     return 1 == HOMEASSISTANT_RETAIN;
+}
+
+PROGMEM_STRING(BirthTopic, HOMEASSISTANT_BIRTH_TOPIC);
+
+constexpr StringView birthTopic() {
+    return BirthTopic;
+}
+
+PROGMEM_STRING(BirthPayload, HOMEASSISTANT_BIRTH_PAYLOAD);
+
+constexpr StringView birthPayload() {
+    return BirthPayload;
 }
 
 } // namespace build
@@ -51,24 +69,74 @@ constexpr bool retain() {
 namespace settings {
 namespace keys {
 
-PROGMEM_STRING(Prefix, "haPrefix");
-PROGMEM_STRING(Enabled, "haEnabled");
-PROGMEM_STRING(Retain, "haRetain");
+STRING_VIEW_INLINE(Enabled, "haEnabled");
+STRING_VIEW_INLINE(Prefix, "haPrefix");
+STRING_VIEW_INLINE(Retain, "haRetain");
+
+STRING_VIEW_INLINE(BirthTopic, "haBirthTopic");
+STRING_VIEW_INLINE(BirthPayload, "haBirthPayload");
 
 } // namespace keys
 
-String prefix() {
-    return getSetting(keys::Prefix, build::prefix());
-}
-
 bool enabled() {
     return getSetting(keys::Enabled, build::enabled());
+}
+
+String prefix() {
+    return getSetting(keys::Prefix, build::prefix());
 }
 
 bool retain() {
     return getSetting(keys::Retain, build::retain());
 }
 
+String birthTopic() {
+    return getSetting(keys::BirthTopic, build::birthTopic());
+}
+
+String birthPayload() {
+    return getSetting(keys::BirthPayload, build::birthPayload());
+}
+
+namespace query {
+namespace internal {
+
+#define EXACT_VALUE(NAME, FUNC)\
+String NAME () {\
+    return espurna::settings::internal::serialize(FUNC());\
+}
+
+EXACT_VALUE(enabled, settings::enabled)
+EXACT_VALUE(retain, settings::retain)
+
+} // namespace internal
+
+static constexpr espurna::settings::query::Setting Settings[] PROGMEM {
+    {keys::Enabled, internal::enabled},
+    {keys::Prefix, settings::prefix},
+    {keys::Retain, internal::retain},
+    {keys::BirthTopic, settings::birthTopic},
+    {keys::BirthPayload, settings::birthPayload},
+};
+
+PROGMEM_STRING(Prefix, "ha");
+
+bool checkSamePrefix(espurna::StringView key) {
+    return espurna::settings::query::samePrefix(key, Prefix);
+}
+
+String findValueFrom(espurna::StringView key) {
+    return espurna::settings::query::Setting::findValueFrom(Settings, key);
+}
+
+void setup() {
+    ::settingsRegisterQueryHandler({
+        .check = checkSamePrefix,
+        .get = findValueFrom,
+    });
+}
+
+} // namespace query
 } // namespace settings
 
 // Output is supposed to be used as both part of the MQTT config topic and the `uniq_id` field
@@ -445,7 +513,7 @@ public:
     }
 
     bool ok() const override {
-        return true;
+        return (lightChannels() > 0);
     }
 
     bool next() override {
@@ -809,8 +877,11 @@ public:
     using Entity = std::unique_ptr<Discovery>;
     using Entities = std::forward_list<Entity>;
 
-    static constexpr duration::Milliseconds WaitShort { 100 };
-    static constexpr duration::Milliseconds WaitLong { 1000 };
+    static constexpr auto WaitRestart = duration::Seconds{ 30 };
+
+    static constexpr auto WaitShort = duration::Milliseconds{ 100 };
+    static constexpr auto WaitLong = duration::Seconds{ 1 };
+
     static constexpr int Retries { 5 };
 
     DiscoveryTask() = delete;
@@ -821,8 +892,8 @@ public:
     DiscoveryTask(DiscoveryTask&&) = delete;
     DiscoveryTask& operator=(DiscoveryTask&&) = delete;
 
-    DiscoveryTask(Context ctx, bool enabled) :
-        _enabled(enabled),
+    DiscoveryTask(Context ctx, State state) :
+        _state(state),
         _ctx(std::move(ctx))
     {}
 
@@ -848,13 +919,18 @@ public:
     }
 
     bool done() const {
-        return _entities.empty();
+        return (_retry < 0) || _entities.empty();
     }
 
     bool ok() const {
-        if ((_retry > 0) && !_entities.empty()) {
-            auto& entity = _entities.front();
-            return entity->ok();
+        if (!done()) {
+            for (auto& entity : _entities) {
+                if (entity->ok()) {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         return false;
@@ -871,7 +947,7 @@ public:
             }
 
             const auto* topic = entity->topic().c_str();
-            const auto* msg = _enabled
+            const auto* msg = (State::Enabled == _state)
                 ? entity->message().c_str()
                 : "";
 
@@ -890,82 +966,70 @@ public:
         return false;
     }
 
+    State state() const {
+        return _state;
+    }
+
 private:
-    bool _enabled { false };
     int _retry { Retries };
+    State _state;
 
     Entities _entities;
     Context _ctx;
 };
 
+constexpr duration::Seconds DiscoveryTask::WaitRestart;
+
 constexpr duration::Milliseconds DiscoveryTask::WaitShort;
-constexpr duration::Milliseconds DiscoveryTask::WaitLong;
+constexpr duration::Seconds DiscoveryTask::WaitLong;
+
+using DiscoveryPtr = std::shared_ptr<DiscoveryTask>;
+using FlagPtr = std::shared_ptr<bool>;
+
+DiscoveryPtr makeDiscovery(State);
+void restartDiscoveryForState(State);
 
 namespace internal {
 
-using TaskPtr = std::shared_ptr<DiscoveryTask>;
-using FlagPtr = std::shared_ptr<bool>;
+bool enabled { build::enabled() };
+bool retain { build::retain() };
 
-bool retain { false };
-bool enabled { false };
+String birthTopic;
+String birthPayload;
 
-enum class State {
-    Initial,
-    Pending,
-    Sent
-};
+timer::SystemTimer task;
+bool sent_once { false };
 
-State state { State::Initial };
-timer::SystemTimer timer;
+void send(DiscoveryPtr, FlagPtr);
 
-void send(TaskPtr ptr, FlagPtr flag_ptr);
-
-void stop(bool done) {
-    timer.stop();
-    if (done) {
-        DEBUG_MSG_P(PSTR("[HA] Stopping discovery\n"));
-        state = State::Sent;
-    } else {
-        DEBUG_MSG_P(PSTR("[HA] Discovery error\n"));
-        state = State::Pending;
-    }
-}
-
-void schedule(duration::Milliseconds wait, TaskPtr ptr, FlagPtr flag_ptr) {
-    timer.schedule_once(
+void schedule(duration::Milliseconds wait, DiscoveryPtr ptr, FlagPtr flag_ptr) {
+    task.schedule_once(
         wait,
         [ptr, flag_ptr]() {
             send(ptr, flag_ptr);
         });
 }
 
-void schedule(TaskPtr ptr, FlagPtr flag_ptr) {
-    schedule(DiscoveryTask::WaitShort, ptr, flag_ptr);
-}
-
-void schedule(TaskPtr ptr) {
-    schedule(DiscoveryTask::WaitShort, ptr, std::make_shared<bool>(true));
-}
-
-void send(TaskPtr ptr, FlagPtr flag_ptr) {
-    auto& task = *ptr;
-    if (!mqttConnected() || task.done()) {
-        stop(true);
+void send(DiscoveryPtr discovery, FlagPtr flag_ptr) {
+    if (!mqttConnected() || discovery->done()) {
+        DEBUG_MSG_P(PSTR("[HA] Stopping discovery\n"));
+        internal::task.stop();
+        internal::sent_once = true;
         return;
     }
 
     auto& flag = *flag_ptr;
     if (!flag) {
-        if (task.retry()) {
-            schedule(ptr, flag_ptr);
+        if (discovery->retry()) {
+            schedule(DiscoveryTask::WaitShort, discovery, flag_ptr);
         } else {
-            stop(false);
+            restartDiscoveryForState(discovery->state());
         }
         return;
     }
 
     uint16_t pid { 0u };
-    auto res = task.send([&](const char* topic, const char* message) {
+    const auto res = discovery->send([&](const char* topic, const char* message) {
         pid = ::mqttSendRaw(topic, message, internal::retain, 1);
         return pid > 0;
     });
@@ -985,104 +1049,191 @@ void send(TaskPtr ptr, FlagPtr flag_ptr) {
     }
 #endif
 
-    auto wait = res
+    const auto wait = res
         ? DiscoveryTask::WaitShort
         : DiscoveryTask::WaitLong;
 
-    if (res || task.retry()) {
-        schedule(wait, ptr, flag_ptr);
+    if (res || discovery->retry()) {
+        schedule(wait, discovery, flag_ptr);
         return;
     }
 
-    stop(false);
+    restartDiscoveryForState(discovery->state());
 }
 
 } // namespace internal
 
-void publishDiscovery() {
-    if (!mqttConnected() || internal::timer || (internal::state != internal::State::Pending)) {
-        return;
-    }
-
-    auto task = std::make_shared<DiscoveryTask>(
-        make_context(), internal::enabled);
+DiscoveryPtr makeDiscovery(State state) {
+    auto discovery = std::make_shared<DiscoveryTask>(
+        make_context(), state);
 
 #if LIGHT_PROVIDER != LIGHT_PROVIDER_NONE
-    task->add<LightDiscovery>();
+    discovery->add<LightDiscovery>();
 #endif
 #if RELAY_SUPPORT
-    task->add<RelayDiscovery>();
+    discovery->add<RelayDiscovery>();
 #endif
 #if SENSOR_SUPPORT
-    task->add<SensorDiscovery>();
+    discovery->add<SensorDiscovery>();
 #endif
 
-    // only happens when nothing is configured to do the add()
-    if (task->done()) {
+    return discovery;
+}
+
+void scheduleDiscovery(duration::Milliseconds duration, DiscoveryPtr discovery) {
+    DEBUG_MSG_P(PSTR("[HA] Discovery scheduled in %zu(ms)\n"), duration.count());
+    internal::schedule(duration, discovery, std::make_shared<bool>(true));
+}
+
+void scheduleDiscovery(DiscoveryPtr discovery) {
+    scheduleDiscovery(DiscoveryTask::WaitShort, discovery);
+}
+
+void restartDiscoveryForState(State state) {
+    DEBUG_MSG_P(PSTR("[HA] Too many retries, restarting discovery\n"));
+    scheduleDiscovery(DiscoveryTask::WaitRestart, makeDiscovery(state));
+}
+
+void publishDiscoveryForState(State state) {
+    if (!mqttConnected()) {
         return;
     }
 
-    internal::schedule(task);
+    auto discovery = makeDiscovery(state);
+
+    // only happens when nothing is configured to do the add()
+    if (discovery->done()) {
+        DEBUG_MSG_P(PSTR("[HA] No discovery task(s) available\n"));
+        return;
+    }
+
+    scheduleDiscovery(discovery);
+}
+
+void publishDiscovery() {
+    publishDiscoveryForState(State::Enabled);
 }
 
 void configure() {
-    bool current = internal::enabled;
-    internal::enabled = settings::enabled();
     internal::retain = settings::retain();
 
-    if (internal::enabled != current) {
-        internal::state = internal::State::Pending;
+    const auto current = internal::enabled;
+    internal::enabled = settings::enabled();
+
+    auto birthTopic = settings::birthTopic();
+    if (internal::birthTopic != birthTopic) {
+        internal::birthTopic = std::move(birthTopic);
+        mqttDisconnect();
     }
 
-    homeassistant::publishDiscovery();
+    auto birthPayload = settings::birthPayload();
+    if (internal::birthPayload != birthPayload) {
+        internal::birthPayload = std::move(birthPayload);
+        mqttDisconnect();
+    }
+
+    if (current != internal::enabled) {
+        publishDiscoveryForState(internal::enabled
+            ? State::Enabled
+            : State::Disabled);
+    }
 }
 
-void mqttCallback(unsigned int type, StringView topic, StringView payload) {
+namespace mqtt {
+
+void onDisconnected() {
+    internal::task.stop();
+    internal::sent_once = false;
+}
+
+void onConnected() {
+    if (!internal::enabled) {
+        return;
+    }
+
+#if LIGHT_PROVIDER != LIGHT_PROVIDER_NONE
+    ::mqttSubscribe(Topic);
+#endif
+    ::espurnaRegisterOnce(publishDiscovery);
+    if (internal::birthTopic.length()) {
+        ::mqttSubscribeRaw(internal::birthTopic.c_str());
+    }
+}
+
+void onMessage(StringView topic, StringView payload) {
+#if LIGHT_PROVIDER != LIGHT_PROVIDER_NONE
+    auto t = ::mqttMagnitude(topic);
+    if (t.equals(Topic)) {
+        receiveLightJson(payload);
+        return;
+    }
+#endif
+
+    if (!internal::birthTopic.length() || (topic != internal::birthTopic)) {
+        return;
+    }
+
+    if (!internal::birthPayload.length() || (payload != internal::birthPayload)) {
+        return;
+    }
+
+    if (internal::retain && (internal::sent_once || internal::task)) {
+        return;
+    }
+
+    publishDiscoveryForState(State::Enabled);
+}
+
+void callback(unsigned int type, StringView topic, StringView payload) {
     if (MQTT_DISCONNECT_EVENT == type) {
-        if (internal::state == internal::State::Sent) {
-            internal::state = internal::State::Pending;
-        }
-        internal::timer.stop();
+        onDisconnected();
         return;
     }
 
     if (MQTT_CONNECT_EVENT == type) {
-#if LIGHT_PROVIDER != LIGHT_PROVIDER_NONE
-        ::mqttSubscribe(Topic);
-#endif
-        ::espurnaRegisterOnce(publishDiscovery);
+        onConnected();
         return;
     }
 
-#if LIGHT_PROVIDER != LIGHT_PROVIDER_NONE
     if (type == MQTT_MESSAGE_EVENT) {
-        auto t = ::mqttMagnitude(topic);
-        if (t.equals(Topic)) {
-            receiveLightJson(payload);
-        }
+        onMessage(topic, payload);
         return;
     }
-#endif
 }
+
+} // namespace mqtt
 
 namespace web {
 
 #if WEB_SUPPORT
 
-PROGMEM_STRING(Prefix, "ha");
+void onAction(uint32_t, const char* action, JsonObject& data) {
+    STRING_VIEW_INLINE(Publish, "ha-publish");
+    STRING_VIEW_INLINE(State, "state");
+
+    if ((Publish == action) && data.containsKey(State)) {
+        publishDiscoveryForState(
+            data[State].as<bool>()
+                ? State::Enabled
+                : State::Disabled);
+        return;
+    }
+}
 
 void onVisible(JsonObject& root) {
-    wsPayloadModule(root, Prefix);
+    wsPayloadModule(root, settings::query::Prefix);
 }
 
 void onConnected(JsonObject& root) {
-    root[FPSTR(settings::keys::Prefix)] = settings::prefix();
-    root[FPSTR(settings::keys::Enabled)] = settings::enabled();
-    root[FPSTR(settings::keys::Retain)] = settings::retain();
+    root[settings::keys::Enabled] = settings::enabled();
+    root[settings::keys::Prefix] = settings::prefix();
+    root[settings::keys::Retain] = settings::retain();
+    root[settings::keys::BirthTopic] = settings::birthTopic();
+    root[settings::keys::BirthPayload] = settings::birthPayload();
 }
 
-bool onKeyCheck(StringView key, const JsonVariant& value) {
-    return espurna::settings::query::samePrefix(key, Prefix);
+bool onKeyCheck(StringView key, const JsonVariant&) {
+    return settings::query::checkSamePrefix(key);
 }
 
 #endif
@@ -1092,15 +1243,29 @@ bool onKeyCheck(StringView key, const JsonVariant& value) {
 #if TERMINAL_SUPPORT
 namespace terminal {
 
+PROGMEM_STRING(Dump, "HA");
+
+void dump(::terminal::CommandContext&& ctx) {
+    settingsDump(ctx, settings::query::Settings);
+}
+
 PROGMEM_STRING(Send, "HA.SEND");
 
 void send(::terminal::CommandContext&& ctx) {
-    internal::state = internal::State::Pending;
-    publishDiscovery();
+    publishDiscoveryForState(State::Enabled);
+    terminalOK(ctx);
+}
+
+PROGMEM_STRING(Clear, "HA.CLEAR");
+
+void clear(::terminal::CommandContext&& ctx) {
+    publishDiscoveryForState(State::Disabled);
     terminalOK(ctx);
 }
 
 static constexpr ::terminal::Command Commands[] PROGMEM {
+    {Dump, dump},
+    {Clear, clear},
     {Send, send},
 };
 
@@ -1114,6 +1279,7 @@ void setup() {
 void setup() {
 #if WEB_SUPPORT
     wsRegister()
+        .onAction(web::onAction)
         .onVisible(web::onVisible)
         .onConnected(web::onConnected)
         .onKeyCheck(web::onKeyCheck);
@@ -1123,11 +1289,13 @@ void setup() {
     lightOnReport(publishLightJson);
     mqttHeartbeat(heartbeat);
 #endif
-    mqttRegister(mqttCallback);
+    mqttRegister(mqtt::callback);
 
 #if TERMINAL_SUPPORT
     terminal::setup();
 #endif
+
+    settings::query::setup();
 
     espurnaRegisterReload(configure);
     configure();

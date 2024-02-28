@@ -1733,6 +1733,23 @@ function initRelayConfig(id, cfg) {
 }
 
 // -----------------------------------------------------------------------------
+// Home Assistant
+// -----------------------------------------------------------------------------
+
+function haActionPublish(event, state) {
+    event.preventDefault();
+    sendAction("ha-publish", {state});
+}
+
+function haPublish(event) {
+    haActionPublish(event, 1);
+}
+
+function haClear(event) {
+    haActionPublish(event, 0);
+}
+
+// -----------------------------------------------------------------------------
 // Sensors & Magnitudes
 // -----------------------------------------------------------------------------
 
@@ -3072,6 +3089,10 @@ function main() {
     });
 
     // Module specific elements
+
+    // HA discovery
+    elementSelectorOnClick(".button-ha-publish", haPublish);
+    elementSelectorOnClick(".button-ha-clear", haClear);
 
     //removeIf(!sensor)
     elementSelectorListener(".button-emon-expected", "click", showPanel);
