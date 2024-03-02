@@ -2649,7 +2649,7 @@ void _lightWebSocketOnAction(uint32_t client_id, const char* action, JsonObject&
     bool update { false };
 
     STRING_VIEW_INLINE(State, "state");
-    if (data.containsKey("state")) {
+    if (data.containsKey(State)) {
         lightState(data[State].as<bool>());
         update = true;
     }
