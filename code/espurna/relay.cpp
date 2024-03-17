@@ -2294,8 +2294,11 @@ void _relayConfigure() {
 
 namespace {
 
+STRING_VIEW_INLINE(RelayPrefix, "relay");
+STRING_VIEW_INLINE(MultiRelay, "multirelay");
+
 bool _relayWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, STRING_VIEW("relay"));
+    return espurna::settings::query::samePrefix(key, RelayPrefix);
 }
 
 void _relayWebSocketUpdate(JsonObject& root) {
@@ -2332,14 +2335,14 @@ void _relayWebSocketOnVisible(JsonObject& root) {
     }
 
     if (relays > 1) {
-        wsPayloadModule(root, PSTR("multirelay"));
+        wsPayloadModule(root, MultiRelay);
         root[FPSTR(espurna::relay::settings::keys::Sync)] =
             espurna::settings::internal::serialize(espurna::relay::settings::syncMode());
         root[FPSTR(espurna::relay::settings::keys::Interlock)] =
             espurna::relay::settings::interlockDelay().count();
     }
 
-    wsPayloadModule(root, PSTR("relay"));
+    wsPayloadModule(root, RelayPrefix);
 }
 
 void _relayWebSocketOnConnected(JsonObject& root) {

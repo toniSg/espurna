@@ -28,12 +28,14 @@ bool _nofussEnabled = false;
 
 #if WEB_SUPPORT
 
+STRING_VIEW_INLINE(NofussPrefix, "nofuss");
+
 bool _nofussWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant& value) {
-    return espurna::settings::query::samePrefix(key, STRING_VIEW("nofuss"));
+    return espurna::settings::query::samePrefix(key, NofussPrefix);
 }
 
 void _nofussWebSocketOnVisible(JsonObject& root) {
-    wsPayloadModule(root, PSTR("nofuss"));
+    wsPayloadModule(root, NofussPrefix);
 }
 
 void _nofussWebSocketOnConnected(JsonObject& root) {

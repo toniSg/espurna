@@ -378,6 +378,8 @@ void _curtainMQTTCallback(unsigned int type, espurna::StringView topic, espurna:
 
 #if WEB_SUPPORT
 
+STRING_VIEW_INLINE(CurtainPrefix, "curtain");
+
 //------------------------------------------------------------------------------
 void _curtainWebSocketOnConnected(JsonObject& root) {
     root["curtainType"] = getSetting("curtainType", "0");
@@ -386,7 +388,7 @@ void _curtainWebSocketOnConnected(JsonObject& root) {
 
 //------------------------------------------------------------------------------
 bool _curtainWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant& value) {
-    return espurna::settings::query::samePrefix(key, STRING_VIEW("curtain"));
+    return espurna::settings::query::samePrefix(key, CurtainPrefix);
 }
 
 //------------------------------------------------------------------------------
@@ -422,7 +424,7 @@ void _curtainWebSocketOnAction(uint32_t client_id, const char * action, JsonObje
 }
 
 void _curtainWebSocketOnVisible(JsonObject& root) {
-    wsPayloadModule(root, PSTR("curtain"));
+    wsPayloadModule(root, CurtainPrefix);
 }
 
 #endif //WEB_SUPPORT

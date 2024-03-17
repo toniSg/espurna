@@ -597,6 +597,9 @@ bool update { false };
 } // namespace internal
 
 namespace settings {
+
+STRING_VIEW_INLINE(Prefix, "led");
+
 namespace query {
 namespace internal {
 
@@ -628,7 +631,7 @@ static constexpr espurna::settings::query::IndexedSetting IndexedSettings[] PROG
 };
 
 bool checkSamePrefix(StringView key) {
-    return espurna::settings::query::samePrefix(key, STRING_VIEW("led"));
+    return espurna::settings::query::samePrefix(key, Prefix);
 }
 
 String findValueFrom(StringView key) {
@@ -991,7 +994,7 @@ bool onKeyCheck(StringView key, const JsonVariant&) {
 }
 
 void onVisible(JsonObject& root) {
-    wsPayloadModule(root, PSTR("led"));
+    wsPayloadModule(root, settings::Prefix);
 }
 
 void onConnected(JsonObject& root) {

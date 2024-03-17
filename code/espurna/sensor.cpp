@@ -3563,47 +3563,47 @@ void onAction(uint32_t client_id, const char* action, JsonObject& data) {
 }
 
 void onVisible(JsonObject& root) {
-    wsPayloadModule(root, PSTR("sns"));
+    wsPayloadModule(root, STRING_VIEW("sns"));
     for (auto sensor : internal::sensors) {
         if (isEmon(sensor)) {
-            wsPayloadModule(root, PSTR("emon"));
+            wsPayloadModule(root, STRING_VIEW("emon"));
         }
 
         if (isAnalog(sensor)) {
-            wsPayloadModule(root, PSTR("analog"));
+            wsPayloadModule(root, STRING_VIEW("analog"));
         }
 
         switch (sensor->id()) {
 #if HLW8012_SUPPORT
         case SENSOR_HLW8012_ID:
-            wsPayloadModule(root, PSTR("hlw"));
+            wsPayloadModule(root, STRING_VIEW("hlw"));
             break;
 #endif
 #if CSE7766_SUPPORT
         case SENSOR_CSE7766_ID:
-            wsPayloadModule(root, PSTR("cse"));
+            wsPayloadModule(root, STRING_VIEW("cse"));
             break;
 #endif
 #if PZEM004T_SUPPORT || PZEM004TV30_SUPPORT
         case SENSOR_PZEM004T_ID:
         case SENSOR_PZEM004TV30_ID:
-            wsPayloadModule(root, PSTR("pzem"));
+            wsPayloadModule(root, STRING_VIEW("pzem"));
             break;
 #endif
 #if PULSEMETER_SUPPORT
         case SENSOR_PULSEMETER_ID:
-            wsPayloadModule(root, PSTR("pm"));
+            wsPayloadModule(root, STRING_VIEW("pm"));
             break;
 #endif
         }
     }
 }
 
-void module(JsonObject& root, const char* prefix, SensorWebSocketMagnitudesCallback callback) {
+void module(JsonObject& root, StringView prefix, SensorWebSocketMagnitudesCallback callback) {
     espurna::web::ws::EnumerablePayload payload{root, STRING_VIEW("magnitudes-module")};
 
     auto& container = payload.root();
-    container[F("prefix")] = FPSTR(prefix);
+    container[STRING_VIEW("prefix")] = prefix;
 
     payload(STRING_VIEW("values"), magnitude::count(),
         {{STRING_VIEW("type"), [](JsonArray& out, size_t index) {
@@ -4351,7 +4351,7 @@ void setup() {
 #if WEB_SUPPORT
 // Used by modules to generate magnitude_id<->module_id mapping for the WebUI
 // Prefix controls the UI templates, supplied callback should retrieve module-specific value Id
-void sensorWebSocketMagnitudes(JsonObject& root, const char* prefix, SensorWebSocketMagnitudesCallback callback) {
+void sensorWebSocketMagnitudes(JsonObject& root, espurna::StringView prefix, SensorWebSocketMagnitudesCallback callback) {
     espurna::sensor::web::module(root, prefix, callback);
 }
 #endif // WEB_SUPPORT

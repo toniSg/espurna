@@ -85,6 +85,8 @@ constexpr bool dhcp() {
 
 namespace settings {
 
+STRING_VIEW_INLINE(Prefix, "ntp");
+
 espurna::duration::Seconds startDelay() {
     return std::clamp(
         getSetting("ntpStartDelay", build::StartDelay),
@@ -380,11 +382,11 @@ time_t now() {
 namespace web {
 
 bool onKeyCheck(StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, STRING_VIEW("ntp"));
+    return espurna::settings::query::samePrefix(key, settings::Prefix);
 }
 
 void onVisible(JsonObject& root) {
-    wsPayloadModule(root, PSTR("ntp"));
+    wsPayloadModule(root, settings::Prefix);
 }
 
 void onData(JsonObject& root) {

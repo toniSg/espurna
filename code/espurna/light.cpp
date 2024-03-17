@@ -2571,10 +2571,14 @@ void _lightApiSetup() {
 
 namespace {
 
+STRING_VIEW_INLINE(PrefixLightLong, "light");
+STRING_VIEW_INLINE(PrefixLightShort, "lt");
+STRING_VIEW_INLINE(PrefixLightUse, "use");
+
 bool _lightWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant&) {
-    return key.startsWith(STRING_VIEW("light"))
-        || key.startsWith(STRING_VIEW("use"))
-        || key.startsWith(STRING_VIEW("lt"));
+    return key.startsWith(PrefixLightLong)
+        || key.startsWith(PrefixLightShort)
+        || key.startsWith(PrefixLightUse);
 }
 
 void _lightWebSocketStatus(JsonObject& root) {
@@ -2605,7 +2609,7 @@ void _lightWebSocketStatus(JsonObject& root) {
 }
 
 void _lightWebSocketOnVisible(JsonObject& root) {
-    wsPayloadModule(root, PSTR("light"));
+    wsPayloadModule(root, PrefixLightLong);
 
     JsonObject& light = root.createNestedObject("light");
 #if RELAY_SUPPORT

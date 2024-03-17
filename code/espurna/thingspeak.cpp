@@ -679,7 +679,7 @@ void loop() {
 namespace web {
 namespace {
 
-PROGMEM_STRING(Prefix, "tspk");
+STRING_VIEW_INLINE(Prefix, "tspk");
 
 bool onKeyCheck(StringView key, const JsonVariant&) {
     return espurna::settings::query::samePrefix(key, Prefix);

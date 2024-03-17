@@ -259,6 +259,9 @@ void show(const Schedules& schedules) {
 } // namespace debug
 
 namespace settings {
+
+PROGMEM_STRING(Prefix, "sch");
+
 namespace keys {
 namespace {
 
@@ -414,7 +417,6 @@ void migrate(int version) {
 namespace query {
 
 bool checkSamePrefix(StringView key) {
-    PROGMEM_STRING(Prefix, "sch");
     return espurna::settings::query::samePrefix(key, Prefix);
 }
 
@@ -574,12 +576,12 @@ void setup() {
 namespace web {
 
 bool onKey(StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, STRING_VIEW("sch"));
+    return espurna::settings::query::samePrefix(key, settings::Prefix);
 }
 
 void onVisible(JsonObject& root) {
     if (schedulable()) {
-        wsPayloadModule(root, PSTR("sch"));
+        wsPayloadModule(root, settings::Prefix);
     }
 }
 
