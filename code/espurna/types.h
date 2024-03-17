@@ -409,4 +409,71 @@ inline String operator+(StringView lhs, const String& rhs) {
 #define STRING_VIEW_SETTING(X)\
     ((__builtin_strlen(X) > 0) ? STRING_VIEW(X) : StringView())
 
+template <typename T>
+struct Span {
+    Span() = delete;
+
+    constexpr Span(T* data, size_t size) :
+        _data(data),
+        _size(size)
+    {}
+
+    constexpr Span(T* begin, const uint8_t* end) :
+        _data(begin),
+        _size(end - begin)
+    {}
+
+    constexpr T* data() const {
+        return _data;
+    }
+
+    constexpr size_t size() const {
+        return _size;
+    }
+
+    constexpr T* begin() const {
+        return _data;
+    }
+
+    constexpr T* end() const {
+        return _data + _size;
+    }
+
+    constexpr T& operator[](size_t index) const {
+        return _data[index];
+    }
+
+    constexpr T& front() const {
+        return _data[0];
+    }
+
+    constexpr T& back() const {
+        return _data[_size - 1];
+    }
+
+private:
+    T* _data;
+    size_t _size;
+};
+
+template <size_t Size>
+inline Span<uint8_t> make_span(uint8_t (&data)[Size]) {
+    return Span<uint8_t>(&data[0], Size);
+}
+
+template <size_t Size>
+inline Span<const uint8_t> make_span(const uint8_t (&data)[Size]) {
+    return Span<const uint8_t>(&data[0], Size);
+}
+
+template <size_t Size>
+inline Span<uint8_t> make_span(std::array<uint8_t, Size>& data) {
+    return Span<uint8_t>(data.data(), data.size());
+}
+
+template <size_t Size>
+inline Span<const uint8_t> make_span(const std::array<uint8_t, Size>& data) {
+    return Span<const uint8_t>(data.data(), data.size());
+}
+
 } // namespace espurna

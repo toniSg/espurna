@@ -48,6 +48,14 @@ inline String hexEncode(const std::array<uint8_t, Size>& data) {
     return hexEncode(data.data(), data.data() + data.size());
 }
 
+inline String hexEncode(espurna::Span<const uint8_t> data) {
+    return hexEncode(std::begin(data), std::end(data));
+}
+
+inline String hexEncode(espurna::Span<uint8_t> data) {
+    return hexEncode(std::begin(data), std::end(data));
+}
+
 inline String hexEncode(uint8_t value) {
     uint8_t buffer[1] { value };
     return hexEncode(buffer);
