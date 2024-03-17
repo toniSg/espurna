@@ -1846,7 +1846,7 @@
 
                                 <div class="pure-control-group terminal">
                                     <textarea class="pure-input-1" id="cmd-output" name="log" wrap="soft" readonly></textarea>
-                                    <input id="cmd-input" class="pure-input-1 module module-cmd" name="cmd" type="text" autocomplete="none" data-action="none">
+                                    <input id="cmd-input" class="pure-input-1 module module-cmd" name="cmd" type="text" autocomplete="off" data-action="none">
                                 </div>
 
                                 <div class="pure-controls module module-cmd">
@@ -2203,7 +2203,7 @@
             <div>
                 <div class="pure-control-group">
                     <label>SSID</label>
-                    <input name="ssid" type="text" value="" data-action="reconnect" required autocomplete="false">
+                    <input name="ssid" type="text" value="" data-action="reconnect" required autocomplete="off">
                     <button type="button" class="pure-button button-more-parent">...</button>
                 </div>
 
@@ -2215,25 +2215,25 @@
 
                 <div class="pure-control-group more">
                     <label>Static IP</label>
-                    <input name="ip" type="text" data-action="reconnect" maxlength="15" autocomplete="false">
+                    <input name="ip" type="text" data-action="reconnect" maxlength="15" autocomplete="off">
                     <span class="pure-form-message-inline">Leave empty to enable DHCP</span>
                 </div>
 
                 <div class="pure-control-group more">
                     <label>Gateway IP</label>
-                    <input name="gw" type="text" data-action="reconnect" maxlength="15" autocomplete="false">
+                    <input name="gw" type="text" data-action="reconnect" maxlength="15" autocomplete="off">
                     <span class="pure-form-message-inline">Set when using a static IP</span>
                 </div>
 
                 <div class="pure-control-group more">
                     <label>Network Mask</label>
-                    <input name="mask" type="text" data-action="reconnect" maxlength="15" autocomplete="false">
+                    <input name="mask" type="text" data-action="reconnect" maxlength="15" autocomplete="off">
                     <span class="pure-form-message-inline">Usually 255.255.255.0 for /24 networks</span>
                 </div>
 
                 <div class="pure-control-group more">
                     <label>DNS IP</label>
-                    <input name="dns" type="text" value="" data-action="reconnect" maxlength="15" autocomplete="false">
+                    <input name="dns" type="text" value="" data-action="reconnect" maxlength="15" autocomplete="off">
                     <span class="pure-form-message-inline">Set the Domain Name Server IP to use when using a static IP</span>
                 </div>
 
@@ -2290,6 +2290,7 @@
         <template id="template-schedule-action-relay">
             <div class="pure-control-group">
                 <label>Action</label>
+                <!-- [html-validate-disable-next form-dup-name] -->
                 <select class="pure-input-2-3" name="schAction" data-changed="true">
 
                     <option value="0">Turn OFF</option>
@@ -2311,8 +2312,10 @@
                 <input name="schAction" class="pure-input-2-3" type="number" min="0" step="1" max="255" value="0">
 
                 <label>Channel</label>
+                <!-- [html-validate-disable-next form-dup-name] -->
                 <select class="pure-input-2-3 enumerable enumerable-channel" name="schTarget" ></select>
 
+                <!-- [html-validate-disable-next form-dup-name] -->
                 <input type="hidden" name="schType" value="light">
             </div>
         </template>
@@ -2322,14 +2325,17 @@
         <template id="template-schedule-action-curtain" class="template">
             <div class="pure-control-group">
                 <label>Curtain position</label>
+                <!-- [html-validate-disable-next form-dup-name] -->
                 <input class="pure-input-2-3" name="schAction" type="number" min="0" step="1" max="100" value="0">
                 <span class="pure-form-message-inline">
                     (%) 0 for open and 100 for closed
                 </span>
 
                 <label>Curtain</label>
+                <!-- [html-validate-disable-next form-dup-name] -->
                 <select class="pure-input-2-3 enumerable enumerable-curtain" name="schTarget" ></select>
 
+                <!-- [html-validate-disable-next form-dup-name] -->
                 <input type="hidden" name="schType" value="curtain">
             </div>
         </template>
@@ -2488,7 +2494,7 @@
         <!-- removeIf(!rfm69) -->
         <template id="template-rfm69-node">
             <div class="pure-control-group">
-                <input name="rfm69Node" type="text" placeholder="Node ID" size="8" autocomplete="false">
+                <input name="rfm69Node" type="text" placeholder="Node ID" size="8" autocomplete="off">
                 <input name="rfm69Key" type="text" placeholder="Key" size="8">
                 <input name="rfm69Topic" type="text" placeholder="MQTT Topic" size="8">
                 <button type="button" class="pure-button button-del-parent pure-input-1-4">Del</button>
@@ -2498,15 +2504,15 @@
 
         <template id="template-rpn-rule">
             <div class="pure-control-group">
-                <input class="pure-input-3-4" name="rpnRule" type="text" placeholder="RPN expression" autocomplete="false">
+                <input class="pure-input-3-4" name="rpnRule" type="text" placeholder="RPN expression" autocomplete="off">
                 <button type="button" class="pure-button button-del-parent">Del</button>
             </div>
         </template>
 
         <template id="template-rpn-topic">
             <div class="pure-control-group">
-                <input name="rpnTopic" class="pure-input-1-2" type="text" placeholder="Topic" autocomplete="false">
-                <input name="rpnName" class="pure-input-1-2" type="text" placeholder="Variable name" autocomplete="false">
+                <input name="rpnTopic" class="pure-input-1-2" type="text" placeholder="Topic" autocomplete="off">
+                <input name="rpnName" class="pure-input-1-2" type="text" placeholder="Variable name" autocomplete="off">
                 <button type="button" class="pure-button button-del-parent">Del</button>
             </div>
         </template>
