@@ -1214,8 +1214,8 @@ void onAction(uint32_t, const char* action, JsonObject& data) {
     if ((Publish == action) && data.containsKey(State)) {
         publishDiscoveryForState(
             data[State].as<bool>()
-                ? State::Enabled
-                : State::Disabled);
+                ? espurna::homeassistant::State::Enabled
+                : espurna::homeassistant::State::Disabled);
         return;
     }
 }
