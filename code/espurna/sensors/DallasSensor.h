@@ -318,7 +318,35 @@ private:
             return SENSOR_ERROR_CRC;
         }
 
+        if (_dataIsValid(out)) {
+            return SENSOR_ERROR_VALUE;
+        }
+
         return SENSOR_ERROR_OK;
+    }
+
+    bool _dataIsValid(const Data& data) {
+        const auto all_zeroes = std::all_of(
+            data.begin(), data.end(),
+            [](uint8_t x) {
+                return x == 0;
+            });
+
+        if (all_zeroes) {
+            return true;
+        }
+
+        const auto all_255 = std::all_of(
+            data.begin(), data.end(),
+            [](uint8_t x) {
+                return x == 0xff;
+            });
+
+        if (all_255) {
+            return true;
+        }
+
+        return false;
     }
 
     int _readScratchpad() {

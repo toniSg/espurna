@@ -285,6 +285,9 @@ String error(unsigned char error) {
     case SENSOR_ERROR_NOT_FOUND:
         result = PSTR("Not found");
         break;
+    case SENSOR_ERROR_VALUE:
+        result = PSTR("Invalid Value");
+        break;
     case SENSOR_ERROR_OTHER:
     default:
         result = PSTR("Other / Unknown Error");
