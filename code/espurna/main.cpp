@@ -307,6 +307,9 @@ void setup() {
     #if I2C_SUPPORT
         i2cSetup();
     #endif
+    #if ONE_WIRE_SUPPORT
+        oneWireSetup();
+    #endif
     #if RFB_SUPPORT
         rfbSetup();
     #endif
