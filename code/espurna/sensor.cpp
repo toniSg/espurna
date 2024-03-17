@@ -237,6 +237,8 @@ Value::operator bool() const {
     return !std::isinf(value) && !std::isnan(value);
 }
 
+namespace {
+
 String error(unsigned char error) {
     const char* result { nullptr };
 
@@ -312,6 +314,8 @@ enum class Filter : int {
     MovingAverage,
     Sum,
 };
+
+} // namespace
 
 // Generic storage. Most of the time we init this on boot with both members or start at 0 and increment with watt-second
 
@@ -522,11 +526,8 @@ bool isAnalog(BaseSensorPtr sensor) {
     return sensor->kind() == BaseAnalogSensor::Kind;
 }
 
-} // namespace
-
 namespace convert {
 namespace temperature {
-namespace {
 
 struct Base {
     constexpr Base() = default;
@@ -702,14 +703,12 @@ constexpr double convert(double value, Unit from, Unit to) {
 #undef UNIT_CAST
 }
 
-} // namespace
 } // namespace temperature
 
 // right now, limited to plain and kilo values
 // (since we mostly care about a fairly small values)
 // type conversion should only work for related types
 namespace metric {
-namespace {
 
 template <typename __Ratio>
 struct Base {
@@ -847,12 +846,10 @@ constexpr double convert(double value, Unit from, Unit to) {
 #undef UNIT_CAST
 }
 
-} // namespace
 } // namespace metric
 } // namespace convert
 
 namespace build {
-namespace {
 
 constexpr double DefaultMinDelta { 0.0 };
 constexpr double DefaultMaxDelta { 0.0 };
@@ -887,12 +884,10 @@ constexpr bool useIndex() {
     return SENSOR_USE_INDEX == 1;
 }
 
-} // namespace
 } // namespace build
 
 namespace settings {
 namespace filters {
-namespace {
 
 PROGMEM_STRING(Last, "last");
 PROGMEM_STRING(Max, "max");
@@ -908,11 +903,9 @@ static constexpr espurna::settings::options::Enumeration<Filter> Options[] PROGM
     {Filter::Sum, Sum},
 };
 
-} // namespace
 } // namespace filters
 
 namespace units {
-namespace {
 
 PROGMEM_STRING(Farenheit, "°F");
 PROGMEM_STRING(Celcius, "°C");
@@ -973,11 +966,9 @@ static constexpr espurna::settings::options::Enumeration<Unit> Options[] PROGMEM
     {Unit::None, None},
 };
 
-} // namespace
 } // namespace units
 
 namespace prefix {
-namespace {
 
 PROGMEM_STRING(Sensor, "sns");
 PROGMEM_STRING(Power, "pwr");
@@ -1065,11 +1056,9 @@ constexpr StringView get(unsigned char type) {
         Unknown;
 }
 
-} // namespace
 } // namespace prefix
 
 namespace suffix {
-namespace {
 
 PROGMEM_STRING(Correction, "Correction");
 PROGMEM_STRING(MaxDelta, "MaxDelta");
@@ -1086,11 +1075,9 @@ PROGMEM_STRING(Total, "Total");
 
 PROGMEM_STRING(Filter, "Filter");
 
-} // namespace
 } // namespace suffix
 
 namespace keys {
-namespace {
 
 PROGMEM_STRING(ReadInterval, "snsRead");
 PROGMEM_STRING(InitInterval, "snsInit");
@@ -1111,10 +1098,7 @@ espurna::settings::Key get(const Magnitude& magnitude, espurna::StringView suffi
     return get(prefix::get(magnitude.type), suffix, magnitude.index_global);
 }
 
-} // namespace
 } // namespace keys
-
-namespace {
 
 espurna::duration::Seconds readInterval() {
     return std::clamp(getSetting(FPSTR(keys::ReadInterval), build::readInterval()),
@@ -1139,7 +1123,6 @@ bool realTimeValues() {
     return getSetting(FPSTR(keys::RealTimeValues), build::realTimeValues());
 }
 
-} // namespace
 } // namespace settings
 
 alignas(4) static constexpr char List[] PROGMEM_STRING_ATTR =
@@ -1283,6 +1266,7 @@ alignas(4) static constexpr char List[] PROGMEM_STRING_ATTR =
 #endif
     "";
 
+} // namespace
 } // namespace sensor
 
 namespace settings {
@@ -1312,6 +1296,8 @@ String serialize(espurna::sensor::Filter filter) {
 } // namespace settings
 
 namespace sensor {
+namespace {
+
 namespace magnitude {
 namespace traits {
 
@@ -1351,8 +1337,6 @@ static constexpr double correction(unsigned char type) {
 }
 
 } // namespace build
-
-namespace {
 
 String format(const Magnitude& magnitude, double value) {
     // XXX: dtostrf only handles basic floating point values and will never produce scientific notation
@@ -1743,8 +1727,6 @@ double process(const Magnitude& magnitude, double value) {
     return roundTo(value, magnitude.decimals);
 }
 
-} // namespace
-
 namespace internal {
 
 std::vector<Magnitude> magnitudes;
@@ -1926,6 +1908,7 @@ std::forward_list<timer::SystemTimer> timers;
 
 } // namespace internal
 } // namespace notifications
+} // namespace
 
 void notify_after(duration::Milliseconds after, NotifyCallback callback) {
     using namespace notifications;
@@ -1944,6 +1927,7 @@ void notify_now(NotifyCallback callback) {
     notifications::internal::callbacks.push_front(callback);
 }
 
+namespace {
 namespace internal {
 
 std::vector<BaseSensorPtr> sensors;
@@ -2692,7 +2676,6 @@ dallas_end:
 }
 
 namespace units {
-namespace {
 
 struct Range {
     Range() = default;
@@ -2915,7 +2898,6 @@ String name(const Magnitude& magnitude) {
     return name(magnitude.units);
 }
 
-} // namespace
 } // namespace units
 
 // -----------------------------------------------------------------------------
@@ -2923,7 +2905,6 @@ String name(const Magnitude& magnitude) {
 // -----------------------------------------------------------------------------
 
 namespace energy {
-namespace {
 
 struct Persist {
     Persist(size_t index, Energy energy) :
@@ -3210,13 +3191,10 @@ void setup(const Magnitude& magnitude) {
             magnitude.sensor->description().c_str());
 }
 
-} // namespace
 } // namespace energy
 
 namespace settings {
 namespace query {
-namespace {
-
 namespace getter {
 
 struct Type {
@@ -3303,7 +3281,6 @@ void setup() {
     });
 }
 
-} // namespace
 } // namespace query
 
 void migrate(int version) {
@@ -3365,7 +3342,6 @@ void migrate(int version) {
 
 #if WEB_SUPPORT
 namespace web {
-namespace {
 
 bool onKeyCheck(StringView key, const JsonVariant&) {
     return settings::query::check(key);
@@ -3648,13 +3624,11 @@ void setup() {
         .onKeyCheck(onKeyCheck);
 }
 
-} // namespace
 } // namespace web
 #endif
 
 #if API_SUPPORT
 namespace api {
-namespace {
 
 template <typename T>
 bool tryHandle(ApiRequest& request, unsigned char type, T&& callback) {
@@ -3719,13 +3693,11 @@ void setup() {
     });
 }
 
-} // namespace
 } // namespace api
 #endif
 
 #if MQTT_SUPPORT
 namespace mqtt {
-namespace {
 
 void report(const Value& report, const Magnitude& magnitude) {
     mqttSend(report.topic.c_str(), report.repr.c_str());
@@ -3782,14 +3754,11 @@ void setup() {
     ::mqttRegister(callback);
 }
 
-} // namespace
 } // namespace mqtt
 #endif
 
 #if TERMINAL_SUPPORT
 namespace terminal {
-namespace {
-
 namespace commands {
 
 PROGMEM_STRING(Magnitudes, "MAGNITUDES");
@@ -3895,7 +3864,6 @@ void setup() {
     espurna::terminal::add(commands::List);
 }
 
-} // namespace
 } // namespace terminal
 #endif
 
@@ -4369,6 +4337,7 @@ void setup() {
     espurnaRegisterReload(sensor::configure);
 }
 
+} // namespace
 } // namespace sensor
 } // namespace espurna
 
