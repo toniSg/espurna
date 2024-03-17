@@ -20,6 +20,8 @@ Copyright (C) 2020 by Maxim Prokhorov <prokhorov dot max at outlook dot com>
 
 #include "system.h"
 
+class BaseSensor;
+
 namespace espurna {
 namespace sensor {
 
@@ -237,6 +239,11 @@ struct Info {
     String topic;
     String description;
 };
+
+using NotifyCallback = bool (*)(const BaseSensor*);
+
+void notify_after(duration::Milliseconds, NotifyCallback);
+void notify_now(NotifyCallback);
 
 } // namespace sensor
 } // namespace espurna

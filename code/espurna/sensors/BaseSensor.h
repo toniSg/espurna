@@ -144,6 +144,10 @@ public:
     virtual void resume() {
     }
 
+    // Custom hook (usually to update sensor state outside of normal methods)
+    virtual void notify() {
+    }
+
     // Loop-like method, call it in your main loop
     virtual void tick() {
     }

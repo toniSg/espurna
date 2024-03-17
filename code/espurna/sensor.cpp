@@ -1908,6 +1908,32 @@ enum class State {
     Reading,
 };
 
+namespace notifications {
+namespace internal {
+
+std::forward_list<NotifyCallback> callbacks;
+std::forward_list<timer::SystemTimer> timers;
+
+} // namespace internal
+} // namespace notifications
+
+void notify_after(duration::Milliseconds after, NotifyCallback callback) {
+    using namespace notifications;
+
+    internal::timers.push_front(timer::SystemTimer());
+
+    auto& instance = internal::timers.front();
+    instance.schedule_once(
+        after,
+        [callback]() {
+            internal::callbacks.push_front(callback);
+        });
+}
+
+void notify_now(NotifyCallback callback) {
+    notifications::internal::callbacks.push_front(callback);
+}
+
 namespace internal {
 
 std::vector<BaseSensorPtr> sensors;
@@ -3864,6 +3890,24 @@ bool try_init() {
 // Magnitude processing
 // -----------------------------------------------------------------------------
 
+void notify() {
+    decltype(notifications::internal::callbacks) callbacks;
+    std::swap(callbacks, notifications::internal::callbacks);
+
+    for (auto sensor : internal::sensors) {
+        for (auto& callback : callbacks) {
+            if (callback(sensor.get())) {
+                sensor->notify();
+            }
+        }
+    }
+
+    notifications::internal::timers.remove_if(
+        [](const timer::SystemTimer& timer) {
+            return !static_cast<bool>(timer);
+        });
+}
+
 void tick() {
     for (auto sensor : internal::sensors) {
         sensor->tick();
@@ -3940,6 +3984,9 @@ void loop() {
     if (internal::state != State::Reading) {
         return;
     }
+
+    // Notify hook, called when requested by sensor
+    sensor::notify();
 
     // Tick hook, called every loop()
     sensor::tick();
