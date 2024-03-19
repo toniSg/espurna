@@ -995,10 +995,8 @@ bool enabled { build::enabled() };
 bool retain { build::retain() };
 
 String birthTopic;
-String birthPayload;
 
 timer::SystemTimer task;
-bool sent_once { false };
 
 void send(DiscoveryPtr, FlagPtr);
 
@@ -1014,7 +1012,6 @@ void send(DiscoveryPtr discovery, FlagPtr flag_ptr) {
     if (!mqttConnected() || discovery->done()) {
         DEBUG_MSG_P(PSTR("[HA] Stopping discovery\n"));
         internal::task.stop();
-        internal::sent_once = true;
         return;
     }
 
@@ -1081,7 +1078,7 @@ DiscoveryPtr makeDiscovery(State state) {
 }
 
 void scheduleDiscovery(duration::Milliseconds duration, DiscoveryPtr discovery) {
-    DEBUG_MSG_P(PSTR("[HA] Discovery scheduled in %zu(ms)\n"), duration.count());
+    DEBUG_MSG_P(PSTR("[HA] Discovery scheduled in %zu (ms)\n"), duration.count());
     internal::schedule(duration, discovery, std::make_shared<bool>(true));
 }
 
@@ -1110,32 +1107,40 @@ void publishDiscoveryForState(State state) {
     scheduleDiscovery(discovery);
 }
 
-void publishDiscovery() {
-    publishDiscoveryForState(State::Enabled);
+void publishDiscoveryForState(bool state) {
+    publishDiscoveryForState(
+        state
+            ? State::Enabled
+            : State::Disabled);
+}
+
+void publishDiscoveryForCurrentState() {
+    publishDiscoveryForState(internal::enabled);
 }
 
 void configure() {
+    auto birthTopic = settings::birthTopic();
+    const auto birthChanged = birthTopic != internal::birthTopic;
+    if (mqttConnected() && birthChanged) {
+        if (internal::birthTopic.length()) {
+            mqttUnsubscribeRaw(internal::birthTopic.c_str());
+        }
+        if (birthTopic.length()) {
+            mqttSubscribeRaw(birthTopic.c_str());
+        }
+    }
+
+    if (birthChanged) {
+        internal::birthTopic = std::move(birthTopic);
+    }
+
     internal::retain = settings::retain();
 
     const auto current = internal::enabled;
     internal::enabled = settings::enabled();
 
-    auto birthTopic = settings::birthTopic();
-    if (internal::birthTopic != birthTopic) {
-        internal::birthTopic = std::move(birthTopic);
-        mqttDisconnect();
-    }
-
-    auto birthPayload = settings::birthPayload();
-    if (internal::birthPayload != birthPayload) {
-        internal::birthPayload = std::move(birthPayload);
-        mqttDisconnect();
-    }
-
-    if (current != internal::enabled) {
-        publishDiscoveryForState(internal::enabled
-            ? State::Enabled
-            : State::Disabled);
+    if (mqttConnected() && (current != internal::enabled)) {
+        publishDiscoveryForState(current);
     }
 }
 
@@ -1143,18 +1148,13 @@ namespace mqtt {
 
 void onDisconnected() {
     internal::task.stop();
-    internal::sent_once = false;
 }
 
 void onConnected() {
-    if (!internal::enabled) {
-        return;
-    }
-
 #if LIGHT_PROVIDER != LIGHT_PROVIDER_NONE
     ::mqttSubscribe(Topic);
 #endif
-    ::espurnaRegisterOnce(publishDiscovery);
+    ::espurnaRegisterOnce(publishDiscoveryForCurrentState);
     if (internal::birthTopic.length()) {
         ::mqttSubscribeRaw(internal::birthTopic.c_str());
     }
@@ -1169,19 +1169,11 @@ void onMessage(StringView topic, StringView payload) {
     }
 #endif
 
-    if (!internal::birthTopic.length() || (topic != internal::birthTopic)) {
-        return;
+    if ((topic == internal::birthTopic)
+     && (payload == settings::birthPayload()))
+    {
+        publishDiscoveryForCurrentState();
     }
-
-    if (!internal::birthPayload.length() || (payload != internal::birthPayload)) {
-        return;
-    }
-
-    if (internal::retain && (internal::sent_once || internal::task)) {
-        return;
-    }
-
-    publishDiscoveryForState(State::Enabled);
 }
 
 void callback(unsigned int type, StringView topic, StringView payload) {
@@ -1212,10 +1204,7 @@ void onAction(uint32_t, const char* action, JsonObject& data) {
     STRING_VIEW_INLINE(State, "state");
 
     if ((Publish == action) && data.containsKey(State)) {
-        publishDiscoveryForState(
-            data[State].as<bool>()
-                ? espurna::homeassistant::State::Enabled
-                : espurna::homeassistant::State::Disabled);
+        publishDiscoveryForState(data[State].as<bool>());
         return;
     }
 }
