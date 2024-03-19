@@ -235,8 +235,12 @@ struct SystemTimer {
     SystemTimer(SystemTimer&&) = default;
     SystemTimer& operator=(SystemTimer&&) = default;
 
-    explicit operator bool() const {
+    bool armed() const {
         return _armed != nullptr;
+    }
+
+    explicit operator bool() const {
+        return armed();
     }
 
     void once(Duration duration, Callback callback) {
