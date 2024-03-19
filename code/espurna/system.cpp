@@ -734,6 +734,26 @@ void SystemTimer::schedule_once(Duration duration, Callback callback) {
 
 } // namespace timer
 
+bool ReadyFlag::wait(duration::Milliseconds interval) {
+    if (_ready) {
+        _ready = false;
+        _timer.schedule_once(
+            interval,
+            [&]() {
+                _ready = true;
+            });
+
+        return true;
+    }
+
+    return false;
+}
+
+void ReadyFlag::stop() {
+    _timer.stop();
+    _ready = true;
+}
+
 namespace {
 
 namespace memory {

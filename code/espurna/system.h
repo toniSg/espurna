@@ -282,6 +282,28 @@ private:
 
 } // namespace timer
 
+struct ReadyFlag {
+    bool wait(duration::Milliseconds);
+    void stop();
+
+    void stop_wait(duration::Milliseconds duration) {
+        stop();
+        wait(duration);
+    }
+
+    bool ready() const {
+        return _ready;
+    }
+
+    explicit operator bool() const {
+        return ready();
+    }
+
+private:
+    bool _ready { true };
+    timer::SystemTimer _timer;
+};
+
 namespace heartbeat {
 
 using Mask = int32_t;

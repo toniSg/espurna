@@ -1751,8 +1751,9 @@ size_t count() {
     return internal::magnitudes.size();
 }
 
-void add(BaseSensorPtr sensor, unsigned char slot, unsigned char type) {
+Magnitude& add(BaseSensorPtr sensor, unsigned char slot, unsigned char type) {
     internal::magnitudes.emplace_back(sensor, slot, type);
+    return internal::magnitudes.back();
 }
 
 const Magnitude* find(unsigned char type, unsigned char index) {
@@ -3880,12 +3881,104 @@ void setup() {
 
 namespace internal {
 
-State state;
+State state { State::None };
+std::unique_ptr<ReadyFlag> init_flag;
 
-TimeSource::time_point last_init;
-TimeSource::time_point last_reading;
+ReadyFlag read_flag;
 
 } // namespace internal
+
+void configure_magnitude(Magnitude& magnitude) {
+    // TODO: namespace and various helpers need some naming tweaks...
+
+    // Only initialized once, notify about reset requirement?
+    if (!magnitude.filter) {
+        magnitude.filter_type = getSetting(
+            settings::keys::get(magnitude, settings::suffix::Filter),
+            magnitude::defaultFilter(magnitude));
+        magnitude.filter = magnitude::makeFilter(magnitude.filter_type);
+    }
+
+    // Some filters must be able store up to a certain amount of readings.
+    magnitude.filter->resize(reportEvery());
+
+    // process emon-specific settings first. ensure that settings use global index and we access sensor with the local one
+    if (isEmon(magnitude.sensor) && magnitude::traits::ratio_supported(magnitude.type)) {
+        auto* sensor = static_cast<BaseEmonSensor*>(magnitude.sensor.get());
+        sensor->setRatio(magnitude.slot, getSetting(
+            settings::keys::get(magnitude, settings::suffix::Ratio),
+            sensor->defaultRatio(magnitude.slot)));
+    }
+
+    // analog variant of emon sensor has some additional settings
+    if (isAnalogEmon(magnitude.sensor) && (magnitude.type == MAGNITUDE_VOLTAGE)) {
+        auto* sensor = static_cast<BaseAnalogEmonSensor*>(magnitude.sensor.get());
+        sensor->setVoltage(getSetting(
+            settings::keys::get(magnitude, settings::suffix::Mains),
+            sensor->defaultVoltage()));
+        sensor->setReferenceVoltage(getSetting(
+            settings::keys::get(magnitude, settings::suffix::Reference),
+            sensor->defaultReferenceVoltage()));
+    }
+
+    // adjust units based on magnitude's type
+    magnitude.units = units::filter(magnitude,
+        getSetting(
+            settings::keys::get(magnitude, settings::suffix::Units),
+            magnitude.sensor->units(magnitude.slot)));
+
+    // adjust resulting value (simple plus or minus)
+    // TODO: inject math or rpnlib expression?
+    if (magnitude::traits::correction_supported(magnitude.type)) {
+        magnitude.correction = getSetting(
+            settings::keys::get(magnitude, settings::suffix::Correction),
+            magnitude::build::correction(magnitude.type));
+    }
+
+    // pick decimal precision either from our (sane) defaults of from the sensor itself
+    // (specifically, when sensor has more or less precision than we expect)
+    {
+        const auto decimals = magnitude.sensor->decimals(magnitude.units);
+        magnitude.decimals = getSetting(
+            settings::keys::get(magnitude, settings::suffix::Precision),
+                (decimals >= 0)
+                    ? static_cast<unsigned char>(decimals)
+                    : magnitude::decimals(magnitude.units));
+    }
+
+    // Per-magnitude min & max delta settings for reporting the value
+    // - ${prefix}MinDelta${index} controls whether we report when report counter overflows
+    //   (default is set to 0.0 aka value has changed from the last recorded one)
+    // - ${prefix}MaxDelta${index} will trigger report as soon as read value is greater than the specified delta
+    //   (default is 0.0 as well, but this needs to be >0 to actually do something)
+    magnitude.min_delta = getSetting(
+        settings::keys::get(magnitude, settings::suffix::MinDelta),
+        build::DefaultMinDelta);
+    magnitude.max_delta = getSetting(
+        settings::keys::get(magnitude, settings::suffix::MaxDelta),
+        build::DefaultMaxDelta);
+
+    // Sometimes we want to ensure the value is above certain threshold before reporting
+    magnitude.zero_threshold = getSetting(
+        settings::keys::get(magnitude, settings::suffix::ZeroThreshold),
+        Value::Unknown);
+
+    // When we don't save energy, purge existing value in both RAM & settings
+    if (isEmon(magnitude.sensor) && (MAGNITUDE_ENERGY == magnitude.type) && (0 == energy::every())) {
+        energy::reset(magnitude.index_global);
+    }
+}
+
+// Update magnitude config, filter sizes and reset energy if needed
+void configure_magnitudes() {
+    for (auto& magnitude : magnitude::internal::magnitudes) {
+        configure_magnitude(magnitude);
+    }
+}
+
+void schedule_read() {
+    internal::read_flag.wait(internal::read_interval);
+}
 
 void suspend() {
     for (auto& sensor : internal::sensors) {
@@ -3894,8 +3987,7 @@ void suspend() {
 }
 
 void resume() {
-    internal::last_init = TimeSource::now();
-    internal::last_reading = TimeSource::now();
+    schedule_read();
 
     magnitude::forEachInstance(
         [](sensor::Magnitude& instance) {
@@ -3934,7 +4026,8 @@ bool init() {
 
         const auto slots = sensor->count();
         for (auto slot = 0; slot < slots; ++slot) {
-            magnitude::add(sensor, slot, sensor->type(slot));
+            auto& result = magnitude::add(sensor, slot, sensor->type(slot));
+            configure_magnitude(result);
         }
     }
 
@@ -3960,11 +4053,25 @@ bool init() {
     return out;
 }
 
-bool try_init() {
-    const auto timestamp = TimeSource::now();
-    if (timestamp - internal::last_init > initInterval()) {
-        internal::last_init = timestamp;
-        return init();
+// setup() helper. try init() and schedule re-initialization in loop()
+void try_init() {
+    if (!init()) {
+        using T = decltype(internal::init_flag)::element_type;
+        auto flag = std::make_unique<T>();
+        flag->wait(internal::init_interval);
+        internal::init_flag = std::move(flag);
+    }
+}
+
+// loop() helper. if init flag was set previously, re-try init() until it works
+bool maybe_try_init(duration::Milliseconds interval) {
+    if (!internal::init_flag) {
+        return true;
+    }
+
+    if (internal::init_flag->wait(interval) && init()) {
+        internal::init_flag.reset(nullptr);
+        return true;
     }
 
     return false;
@@ -4022,24 +4129,14 @@ void error() {
 #endif
 }
 
-void reset_init(duration::Seconds init_interval) {
-    internal::init_interval = init_interval;
-}
-
 void reset_report(duration::Seconds read_interval, size_t report_every) {
     internal::read_interval = read_interval;
     internal::report_every = report_every;
-    internal::last_reading = TimeSource::now();
+    internal::read_flag.stop_wait(read_interval);
 }
 
 bool ready_to_read() {
-    const auto timestamp = TimeSource::now();
-    if (timestamp - internal::last_reading > readInterval()) {
-        internal::last_reading = timestamp;
-        return true;
-    }
-
-    return false;
+    return internal::read_flag.wait(internal::read_interval);
 }
 
 void loop() {
@@ -4055,7 +4152,7 @@ void loop() {
 
     // General initialization, generate magnitudes from available sensors
     if (internal::state == State::Initial) {
-        if (try_init()) {
+        if (maybe_try_init(settings::initInterval())) {
             internal::state = State::Ready;
         }
     }
@@ -4202,17 +4299,11 @@ void loop() {
     }
 }
 
-void configure() {
-    // Read interval is shared between every sensor
-    // TODO: implement scheduling in the sensor itself.
-    // allow reads faster than 1sec, not just internal ones via tick()
-    // allow 'manual' sensors that may be triggered programatically
+void configure_base() {
+    // Read counter is set for each magnitude, and equals to 0 right after this point
     reset_report(
         sensor::settings::readInterval(),
         sensor::settings::reportEvery());
-
-    // Initialization interval is also shared
-    reset_init(sensor::settings::initInterval());
 
     // Generic 'get magnitude value' API calls prefer latest values over the reported ones
     magnitude::prefer_real_time_values(sensor::settings::realTimeValues());
@@ -4220,97 +4311,23 @@ void configure() {
     // TODO: something more generic? energy is an accumulating value, only allow for similar ones?
     // TODO: move to an external module?
     energy::every(sensor::settings::saveEvery());
+}
 
-    // Update magnitude config, filter sizes and reset energy if needed
-    // TODO: namespace and various helpers need some naming tweaks...
-    for (auto& magnitude : magnitude::internal::magnitudes) {
-        // Only initialized once, notify about reset requirement?
-        if (!magnitude.filter) {
-            magnitude.filter_type = getSetting(
-                settings::keys::get(magnitude, settings::suffix::Filter),
-                magnitude::defaultFilter(magnitude));
-            magnitude.filter = magnitude::makeFilter(magnitude.filter_type);
-        }
-
-        // Some filters must be able store up to a certain amount of readings.
-        magnitude.filter->resize(reportEvery());
-
-        // process emon-specific settings first. ensure that settings use global index and we access sensor with the local one
-        if (isEmon(magnitude.sensor) && magnitude::traits::ratio_supported(magnitude.type)) {
-            auto* sensor = static_cast<BaseEmonSensor*>(magnitude.sensor.get());
-            sensor->setRatio(magnitude.slot, getSetting(
-                settings::keys::get(magnitude, settings::suffix::Ratio),
-                sensor->defaultRatio(magnitude.slot)));
-        }
-
-        // analog variant of emon sensor has some additional settings
-        if (isAnalogEmon(magnitude.sensor) && (magnitude.type == MAGNITUDE_VOLTAGE)) {
-            auto* sensor = static_cast<BaseAnalogEmonSensor*>(magnitude.sensor.get());
-            sensor->setVoltage(getSetting(
-                settings::keys::get(magnitude, settings::suffix::Mains),
-                sensor->defaultVoltage()));
-            sensor->setReferenceVoltage(getSetting(
-                settings::keys::get(magnitude, settings::suffix::Reference),
-                sensor->defaultReferenceVoltage()));
-        }
-
-        // adjust units based on magnitude's type
-        magnitude.units = units::filter(magnitude,
-            getSetting(
-                settings::keys::get(magnitude, settings::suffix::Units),
-                magnitude.sensor->units(magnitude.slot)));
-
-        // adjust resulting value (simple plus or minus)
-        // TODO: inject math or rpnlib expression?
-        if (magnitude::traits::correction_supported(magnitude.type)) {
-            magnitude.correction = getSetting(
-                settings::keys::get(magnitude, settings::suffix::Correction),
-                magnitude::build::correction(magnitude.type));
-        }
-
-        // pick decimal precision either from our (sane) defaults of from the sensor itself
-        // (specifically, when sensor has more or less precision than we expect)
-        {
-            const auto decimals = magnitude.sensor->decimals(magnitude.units);
-            magnitude.decimals = getSetting(
-                settings::keys::get(magnitude, settings::suffix::Precision),
-                    (decimals >= 0)
-                        ? static_cast<unsigned char>(decimals)
-                        : magnitude::decimals(magnitude.units));
-        }
-
-        // Per-magnitude min & max delta settings for reporting the value
-        // - ${prefix}MinDelta${index} controls whether we report when report counter overflows
-        //   (default is set to 0.0 aka value has changed from the last recorded one)
-        // - ${prefix}MaxDelta${index} will trigger report as soon as read value is greater than the specified delta
-        //   (default is 0.0 as well, but this needs to be >0 to actually do something)
-        magnitude.min_delta = getSetting(
-            settings::keys::get(magnitude, settings::suffix::MinDelta),
-            build::DefaultMinDelta);
-        magnitude.max_delta = getSetting(
-            settings::keys::get(magnitude, settings::suffix::MaxDelta),
-            build::DefaultMaxDelta);
-
-        // Sometimes we want to ensure the value is above certain threshold before reporting
-        magnitude.zero_threshold = getSetting(
-            settings::keys::get(magnitude, settings::suffix::ZeroThreshold),
-            Value::Unknown);
-
-        // When we don't save energy, purge existing value in both RAM & settings
-        if (isEmon(magnitude.sensor) && (MAGNITUDE_ENERGY == magnitude.type) && (0 == energy::every())) {
-            energy::reset(magnitude.index_global);
-        }
-    }
+void configure() {
+    configure_base();
+    configure_magnitudes();
 }
 
 void setup() {
+    // Make sure settings stay up-to-date
     migrateVersion(settings::migrate);
 
+    // Load & initialize magnitudes from available sensors
     sensor::load();
-    sensor::init();
+    sensor::try_init();
 
-    // Configure based on settings
-    sensor::configure();
+    // Minimal configuration required before entering loop()
+    sensor::configure_base();
 
     // Allow us to query key default
     sensor::settings::query::setup();
