@@ -42,7 +42,7 @@ constexpr bool enabled() {
     return 1 == HOMEASSISTANT_ENABLED;
 }
 
-PROGMEM_STRING(Prefix, HOMEASSISTANT_PREFIX);
+STRING_VIEW_INLINE(Prefix, HOMEASSISTANT_PREFIX);
 
 constexpr StringView prefix() {
     return Prefix;
@@ -52,13 +52,13 @@ constexpr bool retain() {
     return 1 == HOMEASSISTANT_RETAIN;
 }
 
-PROGMEM_STRING(BirthTopic, HOMEASSISTANT_BIRTH_TOPIC);
+STRING_VIEW_INLINE(BirthTopic, HOMEASSISTANT_BIRTH_TOPIC);
 
 constexpr StringView birthTopic() {
     return BirthTopic;
 }
 
-PROGMEM_STRING(BirthPayload, HOMEASSISTANT_BIRTH_PAYLOAD);
+STRING_VIEW_INLINE(BirthPayload, HOMEASSISTANT_BIRTH_PAYLOAD);
 
 constexpr StringView birthPayload() {
     return BirthPayload;
@@ -1232,20 +1232,20 @@ bool onKeyCheck(StringView key, const JsonVariant&) {
 #if TERMINAL_SUPPORT
 namespace terminal {
 
-PROGMEM_STRING(Dump, "HA");
+STRING_VIEW_INLINE(Dump, "HA");
 
 void dump(::terminal::CommandContext&& ctx) {
     settingsDump(ctx, settings::query::Settings);
 }
 
-PROGMEM_STRING(Send, "HA.SEND");
+STRING_VIEW_INLINE(Send, "HA.SEND");
 
 void send(::terminal::CommandContext&& ctx) {
     publishDiscoveryForState(State::Enabled);
     terminalOK(ctx);
 }
 
-PROGMEM_STRING(Clear, "HA.CLEAR");
+STRING_VIEW_INLINE(Clear, "HA.CLEAR");
 
 void clear(::terminal::CommandContext&& ctx) {
     publishDiscoveryForState(State::Disabled);
