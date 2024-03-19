@@ -213,7 +213,7 @@ public:
             _value = result.value;
         }
 
-        if (_port_handler) {
+        if (_port_handler && (_error != SENSOR_ERROR_NOT_READY)) {
             _startPortConversion();
         }
     }
@@ -364,6 +364,8 @@ private:
     }
 
     // when instance is controlling the port, schedule the next conversion
+    // note that SENSOR_ERROR_NOT_READY is expected to only be set from here,
+    // to properly block accidental re-scheduling of conversion in begin() and pre()
     void _startPortConversion() {
         _read_error = SENSOR_ERROR_NOT_READY;
         _startConversion();
@@ -597,7 +599,7 @@ public:
             _value = _valueFromData(_data);
         }
 
-        if (_port_handler) {
+        if (_port_handler && (_error != SENSOR_ERROR_NOT_READY)) {
             _startPortRead();
         }
     }
