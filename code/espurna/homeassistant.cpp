@@ -925,7 +925,7 @@ public:
     bool ok() const {
         if (!done()) {
             for (auto& entity : _entities) {
-                if (entity->ok()) {
+                if (!entity->ok()) {
                     return false;
                 }
             }
