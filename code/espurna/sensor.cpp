@@ -486,6 +486,8 @@ public:
     Filter filter_type { Filter::Median }; // Instead of using raw value, filter it through a filter object
     BaseFilterPtr filter; // *cannot be empty*
 
+    size_t read_count { 0 }; // Number of times 'last' was updated
+
     double last { Value::Unknown }; // Last raw value from sensor (unfiltered)
     double reported { Value::Unknown }; // Last reported value
 
@@ -1890,6 +1892,10 @@ Value safe_value_reported(size_t index) {
         });
 }
 
+bool ready_to_report(const Magnitude& magnitude) {
+    return magnitude.read_count == 0;
+}
+
 } // namespace magnitude
 
 using TimeSource = espurna::time::CoreClock;
@@ -1934,8 +1940,6 @@ namespace {
 namespace internal {
 
 std::vector<BaseSensorPtr> sensors;
-
-size_t read_count;
 size_t report_every { build::reportEvery() };
 
 duration::Seconds read_interval { build::readInterval() };
@@ -3892,10 +3896,10 @@ void suspend() {
 void resume() {
     internal::last_init = TimeSource::now();
     internal::last_reading = TimeSource::now();
-    internal::read_count = 0;
 
     magnitude::forEachInstance(
         [](sensor::Magnitude& instance) {
+            instance.read_count = 0;
             instance.filter->reset();
         });
 
@@ -4026,22 +4030,16 @@ void reset_report(duration::Seconds read_interval, size_t report_every) {
     internal::read_interval = read_interval;
     internal::report_every = report_every;
     internal::last_reading = TimeSource::now();
-    internal::read_count = 0;
 }
 
 bool ready_to_read() {
     const auto timestamp = TimeSource::now();
     if (timestamp - internal::last_reading > readInterval()) {
         internal::last_reading = timestamp;
-        internal::read_count = (internal::read_count + 1) % reportEvery();
         return true;
     }
 
     return false;
-}
-
-bool ready_to_report() {
-    return internal::read_count == 0;
 }
 
 void loop() {
@@ -4127,6 +4125,8 @@ void loop() {
                 value.raw = 0.0;
             }
 
+            magnitude.read_count = (magnitude.read_count + 1) % reportEvery();
+
             magnitude.last = value.raw;
             magnitude.filter->update(value.raw);
 
@@ -4135,7 +4135,7 @@ void loop() {
             magnitude::read(magnitude::value(magnitude, value.processed));
 
             // Initial status or after report counter overflows
-            bool report { ready_to_report() };
+            bool report { magnitude::ready_to_report(magnitude) };
 
             // In case magnitude was configured with ${name}MaxDelta, override report check
             // when the value change is greater than the delta
