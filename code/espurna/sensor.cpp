@@ -4313,6 +4313,10 @@ void configure_base() {
     energy::every(sensor::settings::saveEvery());
 }
 
+bool ready() {
+    return State::Reading == internal::state;
+}
+
 void configure() {
     configure_base();
     configure_magnitudes();
@@ -4461,6 +4465,10 @@ espurna::sensor::Info magnitudeInfo(unsigned char index) {
         .units = Unit::None,
         .decimals = 0,
     };
+}
+
+bool sensorReady() {
+    return espurna::sensor::ready();
 }
 
 espurna::StringView sensorList() {
