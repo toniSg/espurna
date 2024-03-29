@@ -2887,8 +2887,8 @@ static void _relayCommand(::terminal::CommandContext&& ctx) {
 PROGMEM_STRING(PulseCommand, "PULSE");
 
 static void _relayCommandPulse(::terminal::CommandContext&& ctx) {
-    if (ctx.argv.size() < 3) {
-        terminalError(ctx, F("PULSE <ID> <TIME> [<TOGGLE>]"));
+    if (ctx.argv.size() < 2) {
+        terminalError(ctx, F("PULSE <ID> [<TIME>] [<TOGGLE>]"));
         return;
     }
 
@@ -2898,31 +2898,71 @@ static void _relayCommandPulse(::terminal::CommandContext&& ctx) {
         return;
     }
 
-    const auto time = espurna::relay::pulse::settings::parse_time(ctx.argv[2]);
-    if (!time.ok) {
-        terminalError(ctx, F("Invalid pulse time"));
+    using namespace espurna::relay;
+    auto duration = pulse::Duration{ 0 };
+
+    if (ctx.argv.size() >= 3) {
+        const auto parsed = pulse::settings::parse_time(ctx.argv[2]);
+        if (!parsed.ok) {
+            terminalError(ctx, F("Invalid pulse time"));
+            return;
+        }
+
+        duration = pulse::settings::native_duration(parsed);
+    }
+
+    if (duration.count() == 0) {
+        pulse::reset(id);
+        terminalOK(ctx);
         return;
     }
 
-    const auto duration = espurna::relay::pulse::settings::native_duration(time);
-
     bool toggle = true;
-    if (ctx.argv.size() == 4) {
-        auto* convert= espurna::settings::internal::convert<bool>;
+    if (ctx.argv.size() >= 4) {
+        auto* convert = espurna::settings::internal::convert<bool>;
         toggle = convert(ctx.argv[3]);
     }
 
     const auto status = relayStatus(id);
-    if (toggle && _relayPulseActive(id, status)) {
-        terminalError(ctx, F("Pulse already active!"));
+    auto timer = pulse::schedule(
+        duration, id,
+        toggle
+            ? status
+            : !status);
+
+    if (toggle) {
+        relayToggle(id, true, false);
+    } else {
+        (*timer).start();
+    }
+
+    terminalOK(ctx);
+}
+
+PROGMEM_STRING(PulseTimersCommand, "PULSE.TIMERS");
+
+static void _relayCommandPulseTimers(::terminal::CommandContext&& ctx) {
+    using namespace espurna::relay;
+    if (pulse::internal::timers.empty()) {
+        terminalError(ctx, STRING_VIEW("no pulse timers").toString());
         return;
     }
 
-    const auto target = toggle ? status : !status;
-    espurna::relay::pulse::trigger(duration, id, target);
+    for (auto& timer : pulse::internal::timers) {
+        espurna::StringView type;
+        if (relayStatus(timer.id()) == timer.status()) {
+            type = STRING_VIEW("Stalled");
+        } else if (static_cast<bool>(timer)) {
+            type = STRING_VIEW("Active");
+        } else {
+            type = STRING_VIEW("Pending");
+        }
 
-    if ((duration.count() > 0) && toggle) {
-        relayToggle(id, true, false);
+        ctx.output.printf_P(
+            PSTR("pulse%zu\t{%.*s Duration=%u Status=#%c}\n"),
+            type.length(), type.data(),
+            timer.id(), timer.duration().count(),
+            timer.status() ? 't' : 'f');
     }
 
     terminalOK(ctx);
@@ -2998,6 +3038,7 @@ static void _relayCommandUnlock(::terminal::CommandContext&& ctx) {
 static constexpr ::terminal::Command RelayCommands[] PROGMEM {
     {RelayCommand, _relayCommand},
     {PulseCommand, _relayCommandPulse},
+    {PulseTimersCommand, _relayCommandPulseTimers},
     {LockCommand, _relayCommandLock},
     {UnlockCommand, _relayCommandUnlock},
 };
