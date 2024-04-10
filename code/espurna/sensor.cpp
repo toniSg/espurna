@@ -3952,14 +3952,11 @@ bool init() {
         for (auto slot = 0; slot < slots; ++slot) {
             auto& result = magnitude::add(sensor, slot, sensor->type(slot));
             configure_magnitude(result);
-        }
-    }
 
-    // Energy tracking is implemented by looking at the specific magnitude & it's index at read time
-    // TODO: shuffle some functions around so that debug can be in the init func instead and still be inline?
-    for (auto& magnitude : magnitude::internal::magnitudes) {
-        if (MAGNITUDE_ENERGY == magnitude.type) {
-            energy::setup(magnitude);
+            // Energy tracking is implemented by looking at the specific magnitude & it's index at read time
+            if (MAGNITUDE_ENERGY == result.type) {
+                energy::setup(result);
+            }
         }
     }
 
