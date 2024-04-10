@@ -1944,6 +1944,8 @@ std::vector<BaseSensorPtr> sensors;
 size_t report_every { build::reportEvery() };
 
 duration::Seconds read_interval { build::readInterval() };
+
+std::forward_list<PreInitPtr> pre_init;
 duration::Seconds init_interval { build::initInterval() };
 
 } // namespace internal
@@ -2088,103 +2090,7 @@ void load() {
 
 #if DALLAS_SUPPORT
     {
-        PROGMEM_STRING(Pin, "dallasPin");
-        const auto pin = getSetting(Pin, uint8_t{ DALLAS_PIN });
-
-        PROGMEM_STRING(Parasite, "dallasParasite");
-        const auto parasite = getSetting(Parasite, DALLAS_PARASITE == 1);
-
-        PROGMEM_STRING(Resolution, "dallasResolution");
-        const auto resolution = getSetting(Resolution, uint8_t{ DALLAS_RESOLUTION });
-
-        using namespace espurna::driver;
-        auto port = std::make_shared<onewire::Port>();
-
-        // TODO hybrid mode with an extra pull-up pin?
-        // TODO parasite *can* be detected for DS18X, see
-        // 'DS18B20 .pdf / ROM Commands / Read Power Supply (0xB4)'
-        // > During the read time slot, parasite powered DS18B20s will
-        // > pull the bus low, and externally powered DS18B20s will
-        // > let the bus remain high.
-        // (but, not every DS clone properly implements it)
-        auto error = port->attach(pin, parasite);
-        if (onewire::Error::Ok == error) {
-            using namespace espurna::sensor::driver;
-
-            const auto devices = port->devices();
-            DEBUG_MSG_P(PSTR("[DALLAS] Found %zu device(s) on GPIO%hhu\n"),
-                devices.size(), pin);
-
-            std::vector<const onewire::Device*> filtered;
-            filtered.reserve(devices.size());
-
-            for (auto& device : devices) {
-                filtered.push_back(&device);
-            }
-
-            // Currently known sensor types
-            using Temperature = dallas::temperature::Sensor;
-            using Digital = dallas::temperature::Sensor;
-
-            const auto unknown = std::remove_if(
-                filtered.begin(), filtered.end(),
-                [](const onewire::Device* device) {
-                    if (!Temperature::match(*device)
-                     && !Digital::match(*device))
-                    {
-                        DEBUG_MSG_P(PSTR("[DALLAS] Unknown device %s\n"),
-                            hexEncode(device->address).c_str());
-                        return true;
-                    }
-
-                    return false;
-                });
-            filtered.erase(unknown, filtered.end());
-
-            if (!filtered.size()) {
-                error = onewire::Error::NotFound;
-                goto dallas_end;
-            }
-
-            // Push digital sensors first, temperature sensors last
-            // Making sure temperature sensor always becomes port handler
-            std::sort(
-                filtered.begin(), filtered.end(),
-                [](const onewire::Device* lhs, const onewire::Device*) {
-                    return Digital::match(*lhs);
-                });
-
-            // TODO per-sensor resolution matters much?
-            dallas::temperature::Sensor::setResolution(resolution);
-
-            dallas::internal::Sensor* ptr = nullptr;
-            for (const auto* device : filtered) {
-                if (Temperature::match(*device)) {
-                    ptr = new Temperature(port, *device);
-                } else if (Digital::match(*device)) {
-                    ptr = new Digital(port, *device);
-                } else {
-                    error = onewire::Error::NotFound;
-                    goto dallas_end;
-                }
-
-                sensor::add(ptr);
-            }
-
-            // Since sensor reading order is constant, make sure the
-            // last sensor is handling everything related to the wire.
-            // (also note 'Digital' being pushed to the front above)
-            DEBUG_MSG_P(PSTR("[DALLAS] %s is port handler\n"),
-                hexEncode(ptr->getDeviceAddress()).c_str());
-            ptr->setPortHandler();
-        }
-
-dallas_end:
-        if (onewire::Error::Ok != error) {
-            DEBUG_MSG_P(PSTR("[DALLAS] Could not initialize the sensor - %.*s\n"),
-                espurna::driver::onewire::error(error).length(),
-                espurna::driver::onewire::error(error).data());
-        }
+        sensor::driver::dallas::load();
     }
 #endif
 
@@ -4003,6 +3909,25 @@ void resume() {
 bool init() {
     bool out { true };
 
+    while (!internal::pre_init.empty()) {
+        auto it = internal::pre_init.begin();
+
+        auto result = (*it)->find_sensors();
+        if (result.error != SENSOR_ERROR_OK) {
+            DEBUG_MSG_P(PSTR("[SENSOR] %s -> ERROR %s (%hhu)\n"),
+                    (*it)->description().c_str(),
+                    sensor::error(result.error).c_str(), result.error);
+            out = false;
+            break;
+        }
+
+        for (BaseSensor& ptr : result.sensors) {
+            sensor::add(&ptr);
+        }
+
+        internal::pre_init.pop_front();
+    }
+
     for (auto sensor : internal::sensors) {
         // Do not process an already initialized sensor
         if (sensor->ready()) {
@@ -4010,14 +3935,13 @@ bool init() {
         }
 
         // Force sensor to reload config
-        DEBUG_MSG_P(PSTR("[SENSOR] Initializing %s\n"),
-            sensor->description().c_str());
         sensor->begin();
 
         if (!sensor->ready()) {
             const auto error = sensor->error();
             if (error != SENSOR_ERROR_OK) {
-                DEBUG_MSG_P(PSTR("[SENSOR]  -> ERROR %s (%hhu)\n"),
+                DEBUG_MSG_P(PSTR("[SENSOR] %s -> ERROR %s (%hhu)\n"),
+                    sensor->description().c_str(),
                     sensor::error(error).c_str(), error);
             }
             out = false;
@@ -4362,6 +4286,13 @@ void setup() {
 }
 
 } // namespace
+
+PreInit::~PreInit() = default;
+
+void add_preinit(PreInitPtr ptr) {
+    internal::pre_init.push_front(std::move(ptr));
+}
+
 } // namespace sensor
 } // namespace espurna
 

@@ -702,6 +702,236 @@ private:
 
 } // namespace digital
 
+namespace build {
+
+constexpr uint8_t pin() {
+    return DALLAS_PIN;
+}
+
+constexpr bool parasite() {
+    return 1 == DALLAS_PARASITE;
+}
+
+constexpr uint8_t resolution() {
+    return DALLAS_RESOLUTION;
+}
+
+} // namespace build
+
+namespace settings {
+namespace keys {
+
+PROGMEM_STRING(Pin, "dallasPin");
+PROGMEM_STRING(Parasite, "dallasParasite");
+PROGMEM_STRING(Resolution, "dallasResolution");
+
+} // namespace keys
+
+uint8_t pin() {
+    return getSetting(keys::Pin, build::pin());
+}
+
+bool parasite() {
+    return getSetting(keys::Parasite, build::parasite());
+}
+
+uint8_t resolution() {
+    return getSetting(keys::Resolution, build::resolution());
+}
+
+} // namespace settings
+
+struct Config {
+    uint8_t pin;
+    bool parasite;
+    uint8_t resolution;
+};
+
+Config make_config() {
+    return Config{
+        .pin = settings::pin(),
+        .parasite = settings::parasite(),
+        .resolution = settings::resolution(),
+    };
+}
+
+class Init : public sensor::PreInit {
+public:
+    explicit Init(Config config) :
+        _config(config)
+    {}
+
+    Result find_sensors() override {
+        return _find_sensors();
+    }
+
+    String description() const override {
+        return STRING_VIEW("DallasSensor").toString();
+    }
+
+private:
+    using Device = espurna::driver::onewire::Device;
+
+    using Port = espurna::driver::onewire::Port;
+    using PortPtr = std::shared_ptr<Port>;
+
+    using OneWireError = espurna::driver::onewire::Error;
+
+    Result _find_sensors() {
+        const int err = _sensors.size()
+            ? SENSOR_ERROR_OK
+            : _find();
+
+        return Result{
+            .sensors = Sensors(
+                *_sensors.data(),
+                _sensors.size()),
+            .error = err,
+        };
+    }
+
+    int _find() {
+        if (_sensors.size()) {
+            return SENSOR_ERROR_OK;
+        }
+
+        if (!_port) {
+            _port = std::make_shared<Port>();
+        }
+        
+        // TODO hybrid mode with an extra pull-up pin?
+        // TODO parasite *can* be detected for DS18X, see
+        // 'DS18B20 .pdf / ROM Commands / Read Power Supply (0xB4)'
+        // > During the read time slot, parasite powered DS18B20s will
+        // > pull the bus low, and externally powered DS18B20s will
+        // > let the bus remain high.
+        // (but, not every DS clone properly implements it)
+        auto error = _port->attach(_config.pin, _config.parasite);
+
+        using namespace espurna::driver;
+        if (OneWireError::Ok != error) {
+            return _translate(error);
+        }
+
+        const auto filtered = _filter(_port->devices());
+        if (!filtered.size()) {
+            return SENSOR_ERROR_NOT_FOUND;
+        }
+
+        _populate(_port, filtered);
+
+        return SENSOR_ERROR_OK;
+    }
+
+    int _translate(OneWireError error) {
+        using namespace espurna::driver;
+        int out;
+
+        switch (error) {
+        case OneWireError::GpioUsed:
+            out = SENSOR_ERROR_GPIO_USED;
+            break;
+        case OneWireError::NotFound:
+            out = SENSOR_ERROR_NOT_FOUND;
+            break;
+        case OneWireError::Unresponsive:
+            out = SENSOR_ERROR_NOT_READY;
+            break;
+        case OneWireError::Config:
+            out = SENSOR_ERROR_CONFIG;
+            break;
+        case OneWireError::Ok:
+            out = SENSOR_ERROR_OK;
+            break;
+        }
+
+        return out;
+    }
+
+    std::vector<const Device*> _filter(Span<const Device> devices) {
+        using namespace espurna::driver;
+
+        std::vector<const Device*> filtered;
+        filtered.reserve(devices.size());
+
+        for (auto& device : devices) {
+            filtered.push_back(&device);
+        }
+
+        const auto unknown = std::remove_if(
+            filtered.begin(), filtered.end(),
+            [](const onewire::Device* device) {
+                if (!temperature::Sensor::match(*device)
+                 && !digital::Sensor::match(*device))
+                {
+                    DEBUG_MSG_P(PSTR("[DALLAS] Unknown device %s\n"),
+                        hexEncode(device->address).c_str());
+                    return true;
+                }
+
+                return false;
+            });
+
+        filtered.erase(unknown, filtered.end());
+
+        if (filtered.size()) {
+            // Push digital sensors first, temperature sensors last
+            // Making sure temperature sensor always becomes port handler
+            std::sort(
+                filtered.begin(), filtered.end(),
+                [](const onewire::Device* lhs, const onewire::Device*) {
+                    return digital::Sensor::match(*lhs);
+                });
+        }
+
+        return filtered;
+    }
+
+    void _populate(PortPtr port, std::vector<const Device*> devices) {
+        if (_sensors.size()) {
+            return;
+        }
+
+        // TODO per-sensor resolution matters much?
+        temperature::Sensor::setResolution(_config.resolution);
+
+        using Temperature = dallas::temperature::Sensor;
+        using Digital = dallas::temperature::Sensor;
+
+        internal::Sensor* ptr = nullptr;
+        _sensors.reserve(devices.size());
+
+        for (auto& device : devices) {
+            if (Temperature::match(*device)) {
+                ptr = new Temperature(port, *device);
+            } else if (Digital::match(*device)) {
+                ptr = new Digital(port, *device);
+            } else {
+                break;
+            }
+
+            _sensors.push_back(ptr);
+        }
+
+        // Since sensor reading order is constant, make sure the
+        // last sensor is handling everything related to the wire.
+        // (also note 'Digital' being pushed to the front above)
+        DEBUG_MSG_P(PSTR("[DALLAS] %s is port handler\n"),
+            hexEncode(ptr->getDeviceAddress()).c_str());
+        ptr->setPortHandler();
+    }
+
+    Config _config;
+
+    PortPtr _port;
+    std::vector<BaseSensor*> _sensors;
+};
+
+inline void load() {
+    sensor::add_preinit(
+        std::make_unique<Init>(make_config()));
+}
+
 } // namespace
 } // namespace dallas
 } // namespace driver

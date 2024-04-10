@@ -245,6 +245,23 @@ using NotifyCallback = bool (*)(const BaseSensor*);
 void notify_after(duration::Milliseconds, NotifyCallback);
 void notify_now(NotifyCallback);
 
+struct PreInit {
+    using Sensors = Span<BaseSensor>;
+
+    struct Result {
+        Sensors sensors;
+        int error;
+    };
+
+    virtual ~PreInit();
+
+    virtual Result find_sensors() = 0;
+    virtual String description() const = 0;
+};
+
+using PreInitPtr = std::unique_ptr<PreInit>;
+void add_preinit(PreInitPtr);
+
 } // namespace sensor
 } // namespace espurna
 
