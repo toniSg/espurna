@@ -1137,8 +1137,6 @@ public:
         return _state;
     }
 
-    bool ok() const;
-
     template <typename T>
     Result try_send_one(T&& action);
 
@@ -1164,20 +1162,6 @@ private:
     Wait _wait_short { ShortDurations };
     Wait _wait_long { LongDurations };
 };
-
-bool DiscoveryTask::ok() const {
-    if (!done()) {
-        for (auto& entity : _entities) {
-            if (!entity->ok()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    return false;
-}
 
 Result DiscoveryTask::prepare_all() {
     bool prepared { true };
