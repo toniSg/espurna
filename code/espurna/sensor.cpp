@@ -2218,7 +2218,7 @@ dallas_end:
 
 #if DUMMY_SENSOR_SUPPORT
     {
-        add(new DummySensor());
+        add(new driver::dummy::Sensor());
     }
 #endif
 
