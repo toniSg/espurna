@@ -783,9 +783,7 @@ private:
             : _find();
 
         return Result{
-            .sensors = Sensors(
-                *_sensors.data(),
-                _sensors.size()),
+            .sensors = make_span(_sensors),
             .error = err,
         };
     }
@@ -818,7 +816,7 @@ private:
             return SENSOR_ERROR_NOT_FOUND;
         }
 
-        _populate(_port, filtered);
+        _populate(_port, make_span(filtered));
 
         return SENSOR_ERROR_OK;
     }
@@ -860,7 +858,7 @@ private:
 
         const auto unknown = std::remove_if(
             filtered.begin(), filtered.end(),
-            [](const onewire::Device* device) {
+            [](const Device* device) {
                 if (!temperature::Sensor::match(*device)
                  && !digital::Sensor::match(*device))
                 {
@@ -879,7 +877,7 @@ private:
             // Making sure temperature sensor always becomes port handler
             std::sort(
                 filtered.begin(), filtered.end(),
-                [](const onewire::Device* lhs, const onewire::Device*) {
+                [](const Device* lhs, const Device*) {
                     return digital::Sensor::match(*lhs);
                 });
         }
@@ -887,7 +885,7 @@ private:
         return filtered;
     }
 
-    void _populate(PortPtr port, std::vector<const Device*> devices) {
+    void _populate(PortPtr port, Span<const Device*> devices) {
         if (_sensors.size()) {
             return;
         }
@@ -901,7 +899,7 @@ private:
         internal::Sensor* ptr = nullptr;
         _sensors.reserve(devices.size());
 
-        for (auto& device : devices) {
+        for (auto* device : devices) {
             if (Temperature::match(*device)) {
                 ptr = new Temperature(port, *device);
             } else if (Digital::match(*device)) {

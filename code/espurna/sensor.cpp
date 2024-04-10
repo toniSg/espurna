@@ -3921,8 +3921,8 @@ bool init() {
             break;
         }
 
-        for (BaseSensor& ptr : result.sensors) {
-            sensor::add(&ptr);
+        for (auto* ptr : result.sensors) {
+            sensor::add(ptr);
         }
 
         internal::pre_init.pop_front();

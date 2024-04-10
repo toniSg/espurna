@@ -246,7 +246,7 @@ void notify_after(duration::Milliseconds, NotifyCallback);
 void notify_now(NotifyCallback);
 
 struct PreInit {
-    using Sensors = Span<BaseSensor>;
+    using Sensors = Span<BaseSensor*>;
 
     struct Result {
         Sensors sensors;

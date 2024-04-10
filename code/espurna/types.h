@@ -413,12 +413,17 @@ template <typename T>
 struct Span {
     Span() = delete;
 
+    constexpr explicit Span(std::nullptr_t) :
+        _data(nullptr),
+        _size(0)
+    {}
+
     constexpr Span(T* data, size_t size) :
         _data(data),
         _size(size)
     {}
 
-    constexpr Span(T* begin, const uint8_t* end) :
+    constexpr Span(T* begin, T* end) :
         _data(begin),
         _size(end - begin)
     {}
@@ -474,6 +479,16 @@ inline Span<uint8_t> make_span(std::array<uint8_t, Size>& data) {
 template <size_t Size>
 inline Span<const uint8_t> make_span(const std::array<uint8_t, Size>& data) {
     return Span<const uint8_t>(data.data(), data.size());
+}
+
+template <typename T>
+inline Span<T> make_span(std::vector<T>& data) {
+    return Span<T>(data.data(), data.size());
+}
+
+template <typename T>
+inline Span<T> make_span(const std::vector<T>& data) {
+    return Span<T>(const_cast<T*>(data.data()), data.size());
 }
 
 } // namespace espurna
