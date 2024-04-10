@@ -2292,7 +2292,6 @@
         <template id="template-schedule-action-relay">
             <div class="pure-control-group">
                 <label>Action</label>
-                <!-- [html-validate-disable-next form-dup-name] -->
                 <select class="pure-input-2-3" name="schAction" data-changed="true">
 
                     <option value="0">Turn OFF</option>
@@ -2314,10 +2313,8 @@
                 <input name="schAction" class="pure-input-2-3" type="number" min="0" step="1" max="255" value="0">
 
                 <label>Channel</label>
-                <!-- [html-validate-disable-next form-dup-name] -->
                 <select class="pure-input-2-3 enumerable enumerable-channel" name="schTarget" ></select>
 
-                <!-- [html-validate-disable-next form-dup-name] -->
                 <input type="hidden" name="schType" value="light">
             </div>
         </template>
@@ -2327,17 +2324,14 @@
         <template id="template-schedule-action-curtain" class="template">
             <div class="pure-control-group">
                 <label>Curtain position</label>
-                <!-- [html-validate-disable-next form-dup-name] -->
                 <input class="pure-input-2-3" name="schAction" type="number" min="0" step="1" max="100" value="0">
                 <span class="pure-form-message-inline">
                     (%) 0 for open and 100 for closed
                 </span>
 
                 <label>Curtain</label>
-                <!-- [html-validate-disable-next form-dup-name] -->
                 <select class="pure-input-2-3 enumerable enumerable-curtain" name="schTarget" ></select>
 
-                <!-- [html-validate-disable-next form-dup-name] -->
                 <input type="hidden" name="schType" value="curtain">
             </div>
         </template>
