@@ -2105,20 +2105,7 @@ void load() {
 
 #if DIGITAL_SUPPORT
     {
-        const auto pins = gpioPins();
-        for (size_t index = 0; index < pins; ++index) {
-            const auto pin = DigitalSensor::defaultPin(index);
-            if (pin == GPIO_NONE) {
-                break;
-            }
-
-            auto* sensor = new DigitalSensor();
-            sensor->setPin(pin);
-            sensor->setPinMode(DigitalSensor::defaultPinMode(index));
-            sensor->setDefault(DigitalSensor::defaultState(index));
-
-            add(sensor);
-        }
+        sensor::driver::digital::load();
     }
 #endif
 
