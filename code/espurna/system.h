@@ -286,9 +286,9 @@ struct ReadyFlag {
     bool wait(duration::Milliseconds);
     void stop();
 
-    void stop_wait(duration::Milliseconds duration) {
+    bool stop_wait(duration::Milliseconds duration) {
         stop();
-        wait(duration);
+        return wait(duration);
     }
 
     bool ready() const {
