@@ -3883,7 +3883,7 @@ void configure_magnitudes() {
 }
 
 void schedule_read() {
-    internal::read_flag.wait(internal::read_interval);
+    internal::read_flag.stop_wait(internal::read_interval);
 }
 
 void suspend() {
@@ -4081,6 +4081,7 @@ void loop() {
     // If magnitudes were initialized and we are ready, prepare to read sensor data
     if (internal::state == State::Ready) {
         if (magnitude::internal::magnitudes.size() != 0) {
+            schedule_read();
             internal::state = State::Reading;
         }
     }
