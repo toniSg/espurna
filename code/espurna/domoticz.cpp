@@ -437,7 +437,7 @@ namespace {
 STRING_VIEW_INLINE(Prefix, "dcz");
 
 bool onKeyCheck(espurna::StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, Prefix);
+    return key.startsWith(Prefix);
 }
 
 void onVisible(JsonObject& root) {

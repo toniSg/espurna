@@ -394,7 +394,7 @@ size_t countMqttNames() {
 #endif
 
 bool onKeyCheck(espurna::StringView key, const JsonVariant& value) {
-    return espurna::settings::query::samePrefix(key, settings::Prefix);
+    return key.startsWith(settings::Prefix);
 }
 
 void onVisible(JsonObject& root) {

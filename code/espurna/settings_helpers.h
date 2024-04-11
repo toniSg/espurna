@@ -292,10 +292,6 @@ private:
 
 namespace query {
 
-inline bool samePrefix(StringView key, StringView prefix) {
-    return key.startsWith(prefix);
-}
-
 struct StringViewIterator {
     using Element = const StringView*;
 

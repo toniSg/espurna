@@ -382,7 +382,7 @@ time_t now() {
 namespace web {
 
 bool onKeyCheck(StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, settings::Prefix);
+    return key.startsWith(settings::Prefix);
 }
 
 void onVisible(JsonObject& root) {

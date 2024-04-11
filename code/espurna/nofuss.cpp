@@ -31,7 +31,7 @@ bool _nofussEnabled = false;
 STRING_VIEW_INLINE(NofussPrefix, "nofuss");
 
 bool _nofussWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant& value) {
-    return espurna::settings::query::samePrefix(key, NofussPrefix);
+    return key.startsWith(NofussPrefix);
 }
 
 void _nofussWebSocketOnVisible(JsonObject& root) {

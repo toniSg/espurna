@@ -127,7 +127,7 @@ static constexpr std::array<espurna::settings::query::Setting, 3> Settings PROGM
 }};
 
 bool checkExactPrefix(StringView key) {
-    return espurna::settings::query::samePrefix(key, settings::Prefix);
+    return key.startsWith(settings::Prefix);
 }
 
 String findValueFrom(StringView key) {

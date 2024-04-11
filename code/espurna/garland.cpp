@@ -228,9 +228,9 @@ void _garlandWebSocketOnConnected(JsonObject& root) {
 
 //------------------------------------------------------------------------------
 bool _garlandWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, NAME_GARLAND_ENABLED)
-        || espurna::settings::query::samePrefix(key, NAME_GARLAND_BRIGHTNESS)
-        || espurna::settings::query::samePrefix(key, NAME_GARLAND_SPEED);
+    return key.equals(NAME_GARLAND_ENABLED)
+        || key.equals(NAME_GARLAND_BRIGHTNESS)
+        || key.equals(NAME_GARLAND_SPEED);
 }
 
 //------------------------------------------------------------------------------

@@ -682,7 +682,7 @@ namespace {
 STRING_VIEW_INLINE(Prefix, "tspk");
 
 bool onKeyCheck(StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, Prefix);
+    return key.startsWith(Prefix);
 }
 
 void onVisible(JsonObject& root) {

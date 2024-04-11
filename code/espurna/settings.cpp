@@ -64,7 +64,7 @@ String Setting::findValueFrom(const Setting* begin, const Setting* end, StringVi
 
 bool IndexedSetting::findSamePrefix(const IndexedSetting* begin, const IndexedSetting* end, StringView key) {
     for (auto it = begin; it != end; ++it) {
-        if (samePrefix(key, (*it).prefix())) {
+        if (key.startsWith((*it).prefix())) {
             return true;
         }
     }
@@ -180,7 +180,7 @@ void foreach_prefix(PrefixResultCallback&& callback, query::StringViewIterator p
     kv_store.foreach([&](kvs_type::KeyValueResult&& kv) {
         auto key = kv.key.read();
         for (auto it = prefixes.begin(); it != prefixes.end(); ++it) {
-            if (query::samePrefix(StringView{key}, (*it))) {
+            if (StringView{key}.startsWith(*it)) {
                 callback((*it), std::move(key), kv.value);
             }
         }

@@ -407,7 +407,7 @@ static constexpr espurna::settings::query::Setting Settings[] PROGMEM {
 };
 
 bool checkSamePrefix(espurna::StringView key) {
-    return espurna::settings::query::samePrefix(key, settings::Prefix);
+    return key.startsWith(settings::Prefix);
 }
 
 String findValueFrom(espurna::StringView key) {

@@ -417,7 +417,7 @@ void migrate(int version) {
 namespace query {
 
 bool checkSamePrefix(StringView key) {
-    return espurna::settings::query::samePrefix(key, Prefix);
+    return key.startsWith(Prefix);
 }
 
 String findIndexedValueFrom(StringView key) {
@@ -576,7 +576,7 @@ void setup() {
 namespace web {
 
 bool onKey(StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, settings::Prefix);
+    return key.startsWith(settings::Prefix);
 }
 
 void onVisible(JsonObject& root) {

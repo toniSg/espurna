@@ -2242,6 +2242,9 @@ void configure() {
 // -----------------------------------------------------------------------------
 
 namespace settings {
+
+STRING_VIEW_INLINE(Prefix, "wifi");
+
 namespace query {
 
 static constexpr std::array<espurna::settings::query::Setting, 11> Settings PROGMEM {
@@ -2267,12 +2270,7 @@ bool checkIndexedPrefix(StringView key) {
 
 // generic 'ap' and 'modem' configuration
 bool checkExactPrefix(StringView key) {
-    PROGMEM_STRING(Prefix, "wifi");
-    if (espurna::settings::query::samePrefix(key, Prefix)) {
-        return true;
-    }
-
-    return false;
+    return key.startsWith(Prefix);
 }
 
 String findIndexedValueFrom(StringView key) {

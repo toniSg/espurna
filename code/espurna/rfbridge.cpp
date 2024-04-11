@@ -462,7 +462,7 @@ void _rfbWebSocketOnAction(uint32_t client_id, const char* action, JsonObject& d
 }
 
 bool _rfbWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant& value) {
-    return espurna::settings::query::samePrefix(key, rfbridge::settings::Prefix);
+    return key.startsWith(rfbridge::settings::Prefix);
 }
 
 #endif // WEB_SUPPORT

@@ -122,7 +122,7 @@ static constexpr espurna::settings::query::Setting Settings[] PROGMEM {
 STRING_VIEW_INLINE(Prefix, "ha");
 
 bool checkSamePrefix(espurna::StringView key) {
-    return espurna::settings::query::samePrefix(key, Prefix);
+    return key.startsWith(Prefix);
 }
 
 String findValueFrom(espurna::StringView key) {

@@ -68,7 +68,7 @@ namespace web {
 STRING_VIEW_INLINE(Prefix, "api");
 
 bool onKeyCheck(espurna::StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, Prefix);
+    return key.startsWith(Prefix);
 }
 
 void onVisible(JsonObject& root) {

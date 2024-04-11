@@ -388,7 +388,7 @@ void _curtainWebSocketOnConnected(JsonObject& root) {
 
 //------------------------------------------------------------------------------
 bool _curtainWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant& value) {
-    return espurna::settings::query::samePrefix(key, CurtainPrefix);
+    return key.startsWith(CurtainPrefix);
 }
 
 //------------------------------------------------------------------------------

@@ -3140,18 +3140,18 @@ bool check(StringView key) {
         return false;
     }
 
-    using espurna::settings::query::samePrefix;
-    if (samePrefix(key, settings::prefix::Sensor)) {
+    if (key.startsWith(settings::prefix::Sensor)) {
         return true;
     }
 
-    if (samePrefix(key, settings::prefix::Power)) {
+    if (key.startsWith(settings::prefix::Power)) {
         return true;
     }
 
-    return magnitude::forEachCountedCheck([&](unsigned char type) {
-        return samePrefix(key, prefix::get(type));
-    });
+    return magnitude::forEachCountedCheck(
+        [&](unsigned char type) {
+            return key.startsWith(prefix::get(type));
+        });
 }
 
 String get(StringView key) {

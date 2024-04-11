@@ -830,7 +830,7 @@ static constexpr espurna::settings::query::IndexedSetting IndexedSettings[] PROG
 };
 
 bool checkSamePrefix(StringView key) {
-    return espurna::settings::query::samePrefix(key, espurna::button::settings::Prefix);
+    return key.startsWith(espurna::button::settings::Prefix);
 }
 
 String findValueFrom(StringView key) {

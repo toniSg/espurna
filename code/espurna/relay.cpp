@@ -2334,7 +2334,7 @@ STRING_VIEW_INLINE(RelayPrefix, "relay");
 STRING_VIEW_INLINE(MultiRelay, "multirelay");
 
 bool _relayWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant&) {
-    return espurna::settings::query::samePrefix(key, RelayPrefix);
+    return key.startsWith(RelayPrefix);
 }
 
 void _relayWebSocketUpdate(JsonObject& root) {
@@ -3318,7 +3318,7 @@ namespace {
 
 bool checkSamePrefix(StringView key) {
     PROGMEM_STRING(Prefix, "relay");
-    return espurna::settings::query::samePrefix(key, Prefix);
+    return key.startsWith(Prefix);
 }
 
 String findIndexedValueFrom(StringView key) {
