@@ -222,7 +222,7 @@ private:
 namespace options {
 
 struct EnumerationNumericHelper {
-    static bool check(const String& value);
+    static bool check(const String&);
 };
 
 template <typename Value>
@@ -262,7 +262,7 @@ struct alignas(8) Enumeration {
 
 
     Enumeration() = delete;
-    constexpr Enumeration(ValueType value, const char* string) noexcept :
+    constexpr Enumeration(ValueType value, StringView string) noexcept :
         _value(value),
         _string(string)
     {}
@@ -275,17 +275,17 @@ struct alignas(8) Enumeration {
         return static_cast<UnderlyingType>(_value);
     }
 
-    constexpr const char* string() const {
+    constexpr StringView string() const {
         return _string;
     }
 
-    bool operator==(const String& string) const {
-        return strcmp_P(string.c_str(), _string) == 0;
+    bool operator==(StringView other) const {
+        return _string == other;
     }
 
 private:
     ValueType _value;
-    const char* _string;
+    StringView _string;
 };
 
 } // namespace options
