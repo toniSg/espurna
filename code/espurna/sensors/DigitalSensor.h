@@ -152,9 +152,9 @@ STRING_VIEW_INLINE(Prefix, "digital");
 
 namespace keys {
 
-STRING_VIEW_INLINE(Pin, "digitalPin");
-STRING_VIEW_INLINE(Mode, "digitalPinMode");
-STRING_VIEW_INLINE(State, "digitalDefState");
+STRING_VIEW_INLINE(Pin, "dgtlsPin");
+STRING_VIEW_INLINE(Mode, "dgtlsPinMode");
+STRING_VIEW_INLINE(State, "dgtlsDefState");
 
 } // namespace keys
 
