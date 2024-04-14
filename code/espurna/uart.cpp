@@ -461,7 +461,7 @@ bool checkSamePrefix(StringView key) {
 }
 
 String findIndexedValueFrom(StringView key) {
-    return espurna::settings::query::IndexedSetting::findValueFrom(
+    return espurna::settings::query::findValueFrom(
         ports(), IndexedSettings, key);
 
 }

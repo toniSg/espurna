@@ -2264,7 +2264,7 @@ static constexpr std::array<espurna::settings::query::Setting, 11> Settings PROG
 
 // indexed settings for 'sta' connections
 bool checkIndexedPrefix(StringView key) {
-    return espurna::settings::query::IndexedSetting::findSamePrefix(
+    return espurna::settings::query::hasSamePrefix(
         sta::settings::query::Settings, key);
 }
 
@@ -2274,15 +2274,13 @@ bool checkExactPrefix(StringView key) {
 }
 
 String findIndexedValueFrom(StringView key) {
-    using espurna::settings::query::IndexedSetting;
-    return IndexedSetting::findValueFrom(
+    return espurna::settings::query::findValueFrom(
         sta::countNetworks(),
         sta::settings::query::Settings, key);
 }
 
 String findValueFrom(StringView key) {
-    using espurna::settings::query::Setting;
-    return Setting::findValueFrom(Settings, key);
+    return espurna::settings::query::findValueFrom(Settings, key);
 }
 
 void setup() {

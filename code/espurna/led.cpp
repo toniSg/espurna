@@ -635,7 +635,7 @@ bool checkSamePrefix(StringView key) {
 }
 
 String findValueFrom(StringView key) {
-    return espurna::settings::query::IndexedSetting::findValueFrom(
+    return espurna::settings::query::findValueFrom(
         ::espurna::led::internal::leds.size(), IndexedSettings, key);
 }
 

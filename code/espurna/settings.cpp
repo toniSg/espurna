@@ -41,53 +41,73 @@ static kvs_type kv_store(
 
 namespace query {
 
-const Setting* Setting::findFrom(const Setting* begin, const Setting* end, StringView key) {
+String Result::value() const {
+    if (_ptr == nullptr) {
+        return String();
+    }
+
+    return (_index == IndexMax)
+        ? (*reinterpret_cast<const Setting*>(_ptr)).value()
+        : (*reinterpret_cast<const IndexedSetting*>(_ptr)).value(_index);
+}
+
+Result findFrom(const Setting* begin, const Setting* end, StringView key) {
     for (auto it = begin; it != end; ++it) {
         if ((*it) == key) {
-            return it;
+            return Result(it);
         }
     }
 
-    return end;
+    return Result(nullptr);
 }
 
-String Setting::findValueFrom(const Setting* begin, const Setting* end, StringView key) {
+String findValueFrom(const Setting* begin, const Setting* end, StringView key) {
     String out;
 
-    const auto value = findFrom(begin, end, key);
-    if (value != end) {
-        out = (*value).value();
+    const auto result = findFrom(begin, end, key);
+    if (result.ok()) {
+        out = result.value();
     }
 
     return out;
 }
 
-bool IndexedSetting::findSamePrefix(const IndexedSetting* begin, const IndexedSetting* end, StringView key) {
+const IndexedSetting* findSamePrefix(const IndexedSetting* begin, const IndexedSetting* end, StringView key) {
+    const IndexedSetting* out { nullptr };
+
     for (auto it = begin; it != end; ++it) {
         if (key.startsWith((*it).prefix())) {
-            return true;
+            out = it;
+            break;
         }
     }
 
-    return false;
+    return out;
 }
 
-String IndexedSetting::findValueFrom(Iota iota, const IndexedSetting* begin, const IndexedSetting* end, StringView key) {
-    String out;
-
+Result findFrom(Iota iota, const IndexedSetting* begin, const IndexedSetting* end, StringView key) {
     while (iota) {
         for (auto it = begin; it != end; ++it) {
             const auto expected = Key(
                 (*it).prefix().toString(), *iota);
             if (key == expected.value()) {
-                out = (*it).value(*iota);
-                goto output;
+                return Result(it, *iota);
             }
         }
         ++iota;
     }
 
-output:
+    return Result(nullptr);
+}
+
+String findValueFrom(Iota iota, const IndexedSetting* begin, const IndexedSetting* end, StringView key) {
+    String out;
+
+    const auto result = findFrom(iota, begin, end, key);
+    if (result.pointer() != end) {
+        out = result.value();
+    }
+
     return out;
 }
 

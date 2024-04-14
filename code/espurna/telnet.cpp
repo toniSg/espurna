@@ -131,7 +131,7 @@ bool checkExactPrefix(StringView key) {
 }
 
 String findValueFrom(StringView key) {
-    return espurna::settings::query::Setting::findValueFrom(Settings, key);
+    return espurna::settings::query::findValueFrom(Settings, key);
 }
 
 void setup() {

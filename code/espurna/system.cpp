@@ -599,11 +599,11 @@ static constexpr std::array<espurna::settings::query::Setting, 5> Settings PROGM
 }};
 
 bool checkExact(StringView key) {
-    return espurna::settings::query::Setting::findFrom(Settings, key) != Settings.end();
+    return espurna::settings::query::findFrom(Settings, key).ok();
 }
 
 String findValueFrom(StringView key) {
-    return espurna::settings::query::Setting::findValueFrom(Settings, key);
+    return espurna::settings::query::findValueFrom(Settings, key);
 }
 
 void setup() {

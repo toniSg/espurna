@@ -3322,7 +3322,7 @@ bool checkSamePrefix(StringView key) {
 }
 
 String findIndexedValueFrom(StringView key) {
-    return espurna::settings::query::IndexedSetting::findValueFrom(_relays.size(), IndexedSettings, key);
+    return espurna::settings::query::findValueFrom(_relays.size(), IndexedSettings, key);
 }
 
 bool checkExact(StringView key) {
@@ -3336,7 +3336,7 @@ bool checkExact(StringView key) {
 }
 
 String findValueFrom(StringView key) {
-    return espurna::settings::query::Setting::findValueFrom(Settings, key);
+    return espurna::settings::query::findValueFrom(Settings, key);
 }
 
 void setup() {

@@ -194,7 +194,7 @@ bool checkSamePrefix(StringView key) {
 }
 
 String findValueFrom(StringView key) {
-    return espurna::settings::query::IndexedSetting::findValueFrom(
+    return espurna::settings::query::findValueFrom(
         build::SensorsMax, IndexedSettings, key);
 }
 
