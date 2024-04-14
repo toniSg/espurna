@@ -3096,7 +3096,34 @@ void setup(const Magnitude& magnitude) {
 
 namespace settings {
 namespace query {
+
+#define EXACT_VALUE(NAME, FUNC)\
+String NAME () {\
+    return espurna::settings::internal::serialize(FUNC());\
+}
+
+EXACT_VALUE(readInterval, settings::readInterval);
+EXACT_VALUE(initInterval, settings::initInterval);
+EXACT_VALUE(reportEvery, settings::reportEvery);
+EXACT_VALUE(saveEvery, settings::saveEvery);
+EXACT_VALUE(realTimeValues, settings::realTimeValues);
+
+static constexpr espurna::settings::query::Setting Settings[] {
+    {keys::ReadInterval, readInterval},
+    {keys::InitInterval, initInterval},
+    {keys::ReportEvery, reportEvery},
+    {keys::SaveEvery, saveEvery},
+    {keys::RealTimeValues, realTimeValues},
+};
+
+#undef EXACT_VALUE
+
 namespace getter {
+
+#define EXACT_VALUE(NAME)\
+String NAME (const Magnitude& magnitude) {\
+    return espurna::settings::internal::serialize(magnitude.NAME);\
+}
 
 struct Type {
     using Check = bool(*)(unsigned char);
@@ -3106,11 +3133,6 @@ struct Type {
     Check check;
     Get get;
 };
-
-#define EXACT_VALUE(NAME)\
-String NAME (const Magnitude& magnitude) {\
-    return espurna::settings::internal::serialize(magnitude.NAME);\
-}
 
 EXACT_VALUE(correction)
 EXACT_VALUE(decimals)
@@ -3135,17 +3157,19 @@ static constexpr std::array<Type, 5> List PROGMEM {{
 
 } // namespace getter
 
-bool check(StringView key) {
+using espurna::settings::query::Result;
+
+bool checkSensor(StringView key) {
+    return key.startsWith(settings::prefix::Sensor);
+}
+
+Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(Settings, key);
+}
+
+bool checkMagnitude(StringView key) {
     if (key.length() < 3) {
         return false;
-    }
-
-    if (key.startsWith(settings::prefix::Sensor)) {
-        return true;
-    }
-
-    if (key.startsWith(settings::prefix::Power)) {
-        return true;
     }
 
     return magnitude::forEachCountedCheck(
@@ -3154,9 +3178,7 @@ bool check(StringView key) {
         });
 }
 
-String get(StringView key) {
-    String out;
-
+Result findMagnitudeFrom(StringView key) {
     for (auto& magnitude : magnitude::internal::magnitudes) {
         for (const auto& type : getter::List) {
             if (type.check && !type.check(magnitude.type)) {
@@ -3165,20 +3187,27 @@ String get(StringView key) {
 
             const auto expected = keys::get(magnitude, type.suffix);
             if (key == expected.value()) {
-                out = type.get(magnitude);
-                goto out;
+                return Result(type.get(magnitude));
             }
         }
     }
 
-out:
-    return out;
+    return Result(nullptr);
+}
+
+bool check(StringView key) {
+    return checkSensor(key) || checkMagnitude(key);
 }
 
 void setup() {
     settingsRegisterQueryHandler({
-        .check = check,
-        .get = get,
+        .check = checkMagnitude,
+        .get = findMagnitudeFrom,
+    });
+
+    settingsRegisterQueryHandler({
+        .check = checkSensor,
+        .get = findFrom,
     });
 }
 

@@ -420,14 +420,14 @@ bool checkSamePrefix(StringView key) {
     return key.startsWith(Prefix);
 }
 
-String findIndexedValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(count(), IndexedSettings, key);
+espurna::settings::query::Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(count(), IndexedSettings, key);
 }
 
 void setup() {
     settingsRegisterQueryHandler({
         .check = checkSamePrefix,
-        .get = findIndexedValueFrom
+        .get = findFrom,
     });
 }
 

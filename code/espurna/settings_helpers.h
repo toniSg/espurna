@@ -412,13 +412,18 @@ private:
 struct Result {
     static constexpr size_t IndexMax = std::numeric_limits<size_t>::max();
 
-    Result(const Result&) = default;
-    Result& operator=(const Result&) = default;
-
     Result(Result&&) = default;
     Result& operator=(Result&&) = default;
 
     Result() = default;
+
+    explicit Result(const String& value) :
+        _value(std::make_unique<String>(value))
+    {}
+
+    explicit Result(String&& value) :
+        _value(std::make_unique<String>(std::move(value)))
+    {}
 
     explicit Result(const Setting* setting) :
         _ptr(setting)
@@ -430,7 +435,7 @@ struct Result {
     {}
 
     bool ok() const {
-        return _ptr != nullptr;
+        return _ptr != nullptr || _value != nullptr;
     }
 
     explicit operator bool() const {
@@ -446,6 +451,8 @@ struct Result {
 private:
     const void* _ptr { nullptr };
     size_t _index { IndexMax };
+
+    std::unique_ptr<String> _value;
 };
 
 Result findFrom(const Setting* begin, const Setting* end, StringView key);

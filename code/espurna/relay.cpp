@@ -3321,33 +3321,23 @@ bool checkSamePrefix(StringView key) {
     return key.startsWith(Prefix);
 }
 
-String findIndexedValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(_relays.size(), IndexedSettings, key);
+espurna::settings::query::Result findFromIndexed(StringView key) {
+    return espurna::settings::query::findFrom(_relays.size(), IndexedSettings, key);
 }
 
-bool checkExact(StringView key) {
-    for (const auto& setting : Settings) {
-        if (key == setting.key()) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-String findValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(Settings, key);
+espurna::settings::query::Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(Settings, key);
 }
 
 void setup() {
     ::settingsRegisterQueryHandler({
         .check = checkSamePrefix,
-        .get = findIndexedValueFrom
+        .get = findFromIndexed,
     });
 
     ::settingsRegisterQueryHandler({
-        .check = checkExact,
-        .get = findValueFrom
+        .check = nullptr,
+        .get = findFrom,
     });
 }
 

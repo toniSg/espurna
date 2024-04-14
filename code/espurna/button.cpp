@@ -833,15 +833,15 @@ bool checkSamePrefix(StringView key) {
     return key.startsWith(espurna::button::settings::Prefix);
 }
 
-String findValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(
+espurna::settings::query::Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(
         button::internal::buttons.size(), IndexedSettings, key);
 }
 
 void setup() {
     settingsRegisterQueryHandler({
         .check = checkSamePrefix,
-        .get = findValueFrom
+        .get = findFrom,
     });
 }
 

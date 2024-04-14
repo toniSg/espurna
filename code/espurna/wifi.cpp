@@ -2273,27 +2273,25 @@ bool checkExactPrefix(StringView key) {
     return key.startsWith(Prefix);
 }
 
-String findIndexedValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(
+espurna::settings::query::Result findIndexedFrom(StringView key) {
+    return espurna::settings::query::findFrom(
         sta::countNetworks(),
         sta::settings::query::Settings, key);
 }
 
-String findValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(Settings, key);
+espurna::settings::query::Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(Settings, key);
 }
 
 void setup() {
-    // TODO: small implementation detail - when searching, these
-    // should be registered like this so the 'exact' is processed first
     settingsRegisterQueryHandler({
         .check = checkIndexedPrefix,
-        .get = findIndexedValueFrom,
+        .get = findIndexedFrom,
     });
 
     settingsRegisterQueryHandler({
         .check = checkExactPrefix,
-        .get = findValueFrom,
+        .get = findFrom,
     });
 }
 

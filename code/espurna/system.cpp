@@ -598,18 +598,14 @@ static constexpr std::array<espurna::settings::query::Setting, 5> Settings PROGM
      {sleep::settings::keys::Interrupt, query::sleepInterrupt},
 }};
 
-bool checkExact(StringView key) {
-    return espurna::settings::query::findFrom(Settings, key).ok();
-}
-
-String findValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(Settings, key);
+espurna::settings::query::Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(Settings, key);
 }
 
 void setup() {
     settingsRegisterQueryHandler({
-        .check = checkExact,
-        .get = findValueFrom,
+        .check = nullptr,
+        .get = findFrom,
     });
 }
 

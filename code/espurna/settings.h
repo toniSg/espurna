@@ -94,7 +94,7 @@ void foreach_prefix(PrefixResultCallback&&, settings::query::StringViewIterator)
 namespace query {
 
 using Check = bool(*)(StringView key);
-using Get = String(*)(StringView key);
+using Get = Result(*)(StringView key);
 
 struct Handler {
     Check check;
@@ -106,7 +106,7 @@ struct Handler {
 } // namespace espurna
 
 void settingsRegisterQueryHandler(espurna::settings::query::Handler);
-String settingsQuery(espurna::StringView key);
+espurna::settings::query::Result settingsQuery(espurna::StringView key);
 
 // --------------------------------------------------------------------------
 

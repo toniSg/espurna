@@ -42,6 +42,10 @@ static kvs_type kv_store(
 namespace query {
 
 String Result::value() const {
+    if (_value) {
+        return *_value;
+    }
+
     if (_ptr == nullptr) {
         return String();
     }
@@ -119,17 +123,19 @@ std::forward_list<Handler> handlers;
 } // namespace
 } // namespace internal
 
-String find(StringView key) {
-    String out;
-
+Result find(StringView key) {
     for (const auto& handler : internal::handlers) {
-        if (handler.check(key)) {
-            out = handler.get(key);
-            break;
+        if (handler.check != nullptr && !handler.check(key)) {
+            continue;
+        }
+
+        auto result = handler.get(key);
+        if (result.ok()) {
+            return result;
         }
     }
 
-    return out;
+    return Result(nullptr);
 }
 
 } // namespace query
@@ -367,10 +373,10 @@ void get(::terminal::CommandContext&& ctx) {
     for (auto it = (ctx.argv.cbegin() + 1); it != ctx.argv.cend(); ++it) {
         auto result = settings::get(*it);
         if (!result) {
-            const auto maybeValue = query::find(*it);
-            if (maybeValue.length()) {
+            const auto result = query::find(*it);
+            if (result.ok()) {
                 ctx.output.printf_P(PSTR("> %s => %s (default)\n"),
-                    (*it).c_str(), maybeValue.c_str());
+                    (*it).c_str(), result.value().c_str());
             } else {
                 ctx.output.printf_P(PSTR("> %s =>\n"), (*it).c_str());
             }
@@ -452,7 +458,7 @@ void settingsRegisterQueryHandler(espurna::settings::query::Handler handler) {
     espurna::settings::query::internal::handlers.push_front(handler);
 }
 
-String settingsQuery(espurna::StringView key) {
+espurna::settings::query::Result settingsQuery(espurna::StringView key) {
     return espurna::settings::query::find(key);
 }
 

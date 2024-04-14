@@ -152,9 +152,9 @@ STRING_VIEW_INLINE(Prefix, "digital");
 
 namespace keys {
 
-STRING_VIEW_INLINE(Pin, "dgtlsPin");
-STRING_VIEW_INLINE(Mode, "dgtlsPinMode");
-STRING_VIEW_INLINE(State, "dgtlsDefState");
+STRING_VIEW_INLINE(Pin, "digitalPin");
+STRING_VIEW_INLINE(Mode, "digitalPinMode");
+STRING_VIEW_INLINE(State, "digitalDefState");
 
 } // namespace keys
 
@@ -193,15 +193,15 @@ bool checkSamePrefix(StringView key) {
     return key.startsWith(Prefix);
 }
 
-String findValueFrom(StringView key) {
-    return espurna::settings::query::findValueFrom(
+espurna::settings::query::Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(
         build::SensorsMax, IndexedSettings, key);
 }
 
 void setup() {
     settingsRegisterQueryHandler({
         .check = checkSamePrefix,
-        .get = findValueFrom,
+        .get = findFrom,
     });
 }
 
