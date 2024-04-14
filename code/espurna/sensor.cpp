@@ -976,7 +976,6 @@ static constexpr espurna::settings::options::Enumeration<Unit> Options[] PROGMEM
 namespace prefix {
 
 PROGMEM_STRING(Sensor, "sns");
-PROGMEM_STRING(Power, "pwr");
 
 PROGMEM_STRING(Temperature, "tmp");
 PROGMEM_STRING(Humidity, "hum");
