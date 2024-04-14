@@ -232,7 +232,6 @@ label {
     background: rgb(192, 0, 0); /* redish */
 }
 
-.button-update,
 .button-setup-password,
 .button-add-settings-group,
 .button-upgrade-browse,
@@ -246,6 +245,11 @@ label {
 .button-apikey,
 .button-emon-expected-calculate {
     background: rgb(0, 192, 0); /* green */
+}
+
+.button-save {
+    --save-background: grey;
+    background: var(--save-background);
 }
 
 .button-wifi-scan,

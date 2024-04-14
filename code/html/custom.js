@@ -1197,6 +1197,7 @@ function applySettings(settings) {
 function resetOriginals() {
     setOriginalsFromValues();
     resetSettingsGroup();
+
     Settings.resetCounters();
     Settings.saved = false;
 }
@@ -1302,6 +1303,20 @@ function handleFirmwareUpgrade(event) {
     });
 }
 
+function greyoutSave() {
+    const elems = document.querySelectorAll(".button-save");
+    for (let elem of elems) {
+        elem.style.removeProperty("--save-background");
+    }
+}
+
+function greenifySave() {
+    const elems = document.querySelectorAll(".button-save");
+    for (let elem of elems) {
+        elem.style.setProperty("--save-background", "rgb(0, 192, 0)");
+    }
+}
+
 function afterSaved() {
     var response;
 
@@ -1323,6 +1338,7 @@ function afterSaved() {
     }
 
     resetOriginals();
+    greyoutSave();
 }
 
 function waitForSaved(){
@@ -2959,6 +2975,7 @@ function onElementChange(event) {
             }
         }
         setChangedElement(event.target);
+        greenifySave();
     } else {
         if (changed) {
             --Settings.counters.changed;
@@ -2967,6 +2984,7 @@ function onElementChange(event) {
             }
         }
         resetChangedElement(event.target);
+        greyoutSave();
     }
 }
 
@@ -3066,7 +3084,7 @@ function main() {
     // Sidebar menu & buttons
     elementSelectorOnClick(".menu-link", toggleMenu);
     elementSelectorOnClick(".pure-menu-link", showPanel);
-    elementSelectorOnClick(".button-update", (event) => {
+    elementSelectorOnClick(".button-save", (event) => {
         event.preventDefault();
         applySettingsFromAllForms();
     });
