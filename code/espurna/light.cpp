@@ -1541,48 +1541,12 @@ String _lightGroupPayload() {
 // Basic value adjustments. Expression can be:
 // +offset, -offset or the new value
 
-long _lightAdjustValue(long value, espurna::StringView operation) {
-    const auto dot = std::find(operation.begin(), operation.end(), '.');
-    if (dot != operation.end()) {
-        operation = espurna::StringView(operation.begin(), dot);
-    }
-    
-    if (operation.length()) {
-        switch (operation[0]) {
-        case '+':
-        case '-':
-        {
-            const long multiplier = (operation[0] == '-') ? -1 : 1;
-            operation = espurna::StringView(
-                operation.begin() + 1, operation.end());
-
-            const auto result = parseUnsigned(operation, 10);
-            if (result.ok && result.value < std::numeric_limits<long>::max()) {
-                return value + (static_cast<long>(result.value) * multiplier);
-            }
-            break;
-        }
-
-        default:
-        {
-            const auto result = parseUnsigned(operation, 10);
-            if (result.ok && result.value < std::numeric_limits<long>::max()) {
-                return result.value;
-            }
-        }
-
-        }
-    }
-
-    return value;
-}
-
 void _lightAdjustBrightness(espurna::StringView payload) {
-    lightBrightness(_lightAdjustValue(_light_brightness.value(), payload));
+    lightBrightness(adjustNumber(_light_brightness.value(), payload));
 }
 
 void _lightAdjustChannel(LightChannel& channel, espurna::StringView payload) {
-    channel = _lightAdjustValue(channel.inputValue, payload);
+    channel = adjustNumber(channel.inputValue, payload);
 }
 
 void _lightAdjustChannel(size_t id, espurna::StringView payload) {
@@ -1593,7 +1557,7 @@ void _lightAdjustChannel(size_t id, espurna::StringView payload) {
 
 void _lightAdjustKelvin(espurna::StringView payload) {
     const auto kelvin = _light_temperature.kelvin();
-    const auto adjusted = _lightAdjustValue(kelvin.value, payload);
+    const auto adjusted = adjustNumber(kelvin.value, payload);
     _lightTemperature(espurna::light::Kelvin{
         .value = adjusted,
     });
@@ -1601,7 +1565,7 @@ void _lightAdjustKelvin(espurna::StringView payload) {
 
 void _lightAdjustMireds(espurna::StringView payload) {
     const auto mireds = _light_temperature.mireds();
-    const auto adjusted = _lightAdjustValue(mireds.value, payload);
+    const auto adjusted = adjustNumber(mireds.value, payload);
     _lightTemperature(espurna::light::Mireds{
         .value = adjusted,
     });

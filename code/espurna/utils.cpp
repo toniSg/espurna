@@ -255,6 +255,44 @@ bool isNumber(espurna::StringView view) {
     return digit;
 }
 
+// operation is +offset, -offset which is then applied to the value
+// or, just the new value (returned as-is)
+long adjustNumber(long value, espurna::StringView operation) {
+    const auto dot = std::find(operation.begin(), operation.end(), '.');
+    if (dot != operation.end()) {
+        operation = espurna::StringView(operation.begin(), dot);
+    }
+
+    if (operation.length()) {
+        switch (operation[0]) {
+        case '+':
+        case '-':
+        {
+            const long multiplier = (operation[0] == '-') ? -1 : 1;
+            operation = espurna::StringView(
+                operation.begin() + 1, operation.end());
+
+            const auto result = parseUnsigned(operation, 10);
+            if (result.ok && result.value < std::numeric_limits<long>::max()) {
+                return value + (static_cast<long>(result.value) * multiplier);
+            }
+            break;
+        }
+
+        default:
+        {
+            const auto result = parseUnsigned(operation, 10);
+            if (result.ok && result.value < std::numeric_limits<long>::max()) {
+                return result.value;
+            }
+        }
+
+        }
+    }
+
+    return value;
+}
+
 // ref: lwip2 lwip_strnstr with strnlen
 char* strnstr(const char* buffer, const char* token, size_t n) {
   const auto token_len = strnlen_P(token, n);

@@ -34,6 +34,8 @@ ParseUnsignedResult parseUnsigned(espurna::StringView, int base);
 ParseUnsignedResult parseUnsigned(espurna::StringView);
 String formatUnsigned(uint32_t value, int base);
 
+long adjustNumber(long, espurna::StringView operation);
+
 char* hexEncode(const uint8_t* in_begin, const uint8_t* in_end, char* out_begin, char* out_end);
 size_t hexEncode(const uint8_t* in, size_t in_size, char* out, size_t out_size);
 String hexEncode(const uint8_t* begin, const uint8_t* end);
