@@ -836,6 +836,10 @@ std::unique_ptr<LightProvider> _light_provider;
 
 namespace {
 
+void _lightBrightness(long brightness) {
+    _light_brightness = std::clamp(brightness, espurna::light::BrightnessMin, espurna::light::BrightnessMax);
+}
+
 void _lightBrightnessPercent(long value) {
     _light_brightness.percent(value);
 }
@@ -3272,8 +3276,16 @@ void lightTemperature(espurna::light::Mireds mireds) {
     _lightTemperature(mireds);
 }
 
-void lightMireds(espurna::light::Kelvin kelvin) {
+void lightAdjustMireds(espurna::StringView payload) {
+    _lightAdjustMireds(payload);
+}
+
+void lightTemperature(espurna::light::Kelvin kelvin) {
     _lightTemperature(kelvin);
+}
+
+void lightAdjustKelvin(espurna::StringView payload) {
+    _lightAdjustKelvin(payload);
 }
 
 espurna::light::TemperatureRange lightMiredsRange() {
@@ -3302,6 +3314,10 @@ void lightChannelStep(size_t id, long steps) {
     lightChannelStep(id, steps, espurna::light::ValueStep);
 }
 
+void lightAdjustChannel(size_t id, espurna::StringView payload) {
+    _lightAdjustChannel(id, payload);
+}
+
 long lightBrightness() {
     return _light_brightness.value();
 }
@@ -3311,15 +3327,19 @@ void lightBrightnessPercent(long percent) {
 }
 
 void lightBrightness(long brightness) {
-    _light_brightness = std::clamp(brightness, espurna::light::BrightnessMin, espurna::light::BrightnessMax);
+    _lightBrightness(brightness);
 }
 
 void lightBrightnessStep(long steps, long multiplier) {
-    lightBrightness(_light_brightness.value() + (steps * multiplier));
+    _lightBrightness(_light_brightness.value() + (steps * multiplier));
 }
 
 void lightBrightnessStep(long steps) {
     lightBrightnessStep(steps, espurna::light::ValueStep);
+}
+
+void lightAdjustBrightness(espurna::StringView payload) {
+    _lightAdjustBrightness(payload);
 }
 
 espurna::duration::Milliseconds lightTransitionTime() {
