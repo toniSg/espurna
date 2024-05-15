@@ -30,7 +30,6 @@ using Milliseconds = std::chrono::duration<uint32_t, std::milli>;
 using Seconds = std::chrono::duration<uint32_t, std::ratio<1> >;
 using Minutes = std::chrono::duration<uint32_t, std::ratio<60> >;
 using Hours = std::chrono::duration<uint32_t, std::ratio<Minutes::period::num * 60> >;
-using Days = std::chrono::duration<uint32_t, std::ratio<Hours::period::num * 24> >;
 
 } // namespace duration
 
