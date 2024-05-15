@@ -1092,9 +1092,16 @@ function fillTemplateLineFromCfg(line, id, cfg) {
     setOriginalsFromValuesForNode(line);
 }
 
-
 function delParent(event) {
-    event.target.parentElement.dispatchEvent(
+    let target = event.target;
+    let parent = target.parentElement;
+
+    while (!parent.classList.contains("settings-group")) {
+        target = parent;
+        parent = target.parentElement;
+    }
+
+    target.dispatchEvent(
         new CustomEvent("settings-group-del", {bubbles: true}));
 }
 
