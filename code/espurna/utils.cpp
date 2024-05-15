@@ -54,10 +54,7 @@ static uint8_t hex_char2byte(char c) {
 }
 
 static ParseUnsignedResult parseUnsignedImpl(espurna::StringView value, int base) {
-    auto out = ParseUnsignedResult{
-        .ok = false,
-        .value = 0,
-    };
+    ParseUnsignedResult out;
 
     using Char2Byte = uint8_t(*)(char);
     Char2Byte char2byte = nullptr;

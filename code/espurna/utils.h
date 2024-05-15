@@ -26,8 +26,8 @@ bool almostEqual(double lhs, double rhs, int ulp);
 bool almostEqual(double lhs, double rhs);
 
 struct ParseUnsignedResult {
-    bool ok;
-    uint32_t value;
+    bool ok { false };
+    uint32_t value { 0 };
 };
 
 ParseUnsignedResult parseUnsigned(espurna::StringView, int base);
