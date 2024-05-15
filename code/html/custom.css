@@ -491,6 +491,14 @@ input[disabled] + .toggle .toggle__handler {
     padding: 10px 0 10px 0;
 }
 
+.schedule {
+    margin-bottom: 10px;
+}
+
+.schedule .button-del-parent {
+    margin-left: auto;
+}
+
 #networks .more {
     display: none;
 }

@@ -927,14 +927,7 @@ function styleVisible(selector, value) {
 }
 
 function moduleVisible(module) {
-    if (module === "sch") {
-        styleInject([
-            `li.module-${module} { display: inherit; }`,
-            `div.module-${module} { display: flex; }`
-        ]);
-    } else {
-        styleInject([`.module-${module} { display: inherit; }`]);
-    }
+    styleInject([`.module-${module} { display: inherit; }`]);
 }
 
 // Update <input> and <select> elements that were set externally. Generic change handler will allow to compare with user input,
@@ -1062,9 +1055,13 @@ function initGenericKeyValueElement(key, value) {
 // (also see {create,update}Checkboxes())
 
 function fillTemplateLineFromCfg(line, id, cfg) {
+    let local = {"template-id": id};
     if (cfg === undefined) {
         cfg = {};
     }
+
+    Object.assign(local, cfg);
+    cfg = local;
 
     for (let elem of line.querySelectorAll("input,select,span")) {
         let key = elem.name || elem.dataset.key;
@@ -1675,28 +1672,8 @@ function ledAdd(cfg) {
 // Date and time scheduler
 // -----------------------------------------------------------------------------
 
-function schAdd(cfg) {
-    if (cfg.schType === undefined) {
-        return;
-    }
-
-    let container = document.getElementById("schedules");
-
-    let id = idForTemplateContainer(container);
-    if (id < 0) {
-        return;
-    }
-
-    let line = loadConfigTemplate("schedule-config");
-
-    if (cfg.schType !== "none") {
-        mergeTemplate(line.querySelector(".schedule-action"),
-            loadConfigTemplate("schedule-action-".concat(cfg.schType)));
-    }
-
-    fillTemplateLineFromCfg(line, id, cfg);
-    mergeTemplate(container, line);
-    return;
+function schedulerAdd(cfg) {
+    addFromTemplate(document.getElementById("schedules"), "schedule-config", cfg);
 }
 
 // -----------------------------------------------------------------------------
@@ -2796,7 +2773,7 @@ function processData(data) {
             container.dataset["settingsMax"] = value.max;
 
             value.schedules.forEach((entries) => {
-                schAdd(fromSchema(entries, value.schema));
+                schedulerAdd(fromSchema(entries, value.schema));
             });
 
             return;
@@ -3236,10 +3213,7 @@ function main() {
     });
 
     groupSettingsOnAdd("schedules", () => {
-        if (event.detail.target) {
-            schAdd({schType: event.detail.target});
-            return;
-        }
+        schedulerAdd();
     });
 
     groupSettingsOnAdd("rpn-rules", () => {
