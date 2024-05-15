@@ -1401,7 +1401,7 @@
 #endif
 
 #ifndef SCHEDULER_LATITUDE
-#define SCHEDULER_LATITUDE             51.503399    // Required for sunrise and sunset calculation to work 
+#define SCHEDULER_LATITUDE             51.503399    // Required for sunrise and sunset calculation to work
 #endif
 
 #ifndef SCHEDULER_LONGITUDE
@@ -1508,7 +1508,7 @@
 #endif
 
 #ifndef RFB_PORT
-#define RFB_PORT                    1               // If EFM is enabled, use this UART port 
+#define RFB_PORT                    1               // If EFM is enabled, use this UART port
 #endif
 
 #ifndef RFB_RX_PIN
