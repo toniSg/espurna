@@ -105,14 +105,6 @@ String serialize(espurna::heartbeat::Mode mode) {
     return serialize(system::settings::options::HeartbeatModeOptions, mode);
 }
 
-String serialize(espurna::duration::Seconds value) {
-    return serialize(value.count());
-}
-
-String serialize(espurna::duration::Milliseconds value) {
-    return serialize(value.count());
-}
-
 String serialize(espurna::duration::ClockCycles value) {
     return serialize(value.count());
 }

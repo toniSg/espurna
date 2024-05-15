@@ -395,8 +395,6 @@ template <>
 heartbeat::Mode convert(const String&);
 
 String serialize(heartbeat::Mode);
-String serialize(duration::Seconds);
-String serialize(duration::Milliseconds);
 String serialize(duration::ClockCycles);
 
 } // namespace internal
