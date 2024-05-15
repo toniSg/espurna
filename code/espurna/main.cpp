@@ -358,8 +358,8 @@ void setup() {
     #if TUYA_SUPPORT
         tuya::setup();
     #endif
-    #if KINGART_CURTAIN_SUPPORT
-        kingartCurtainSetup();
+    #if CURTAIN_SUPPORT
+        curtainSetup();
     #endif
     #if FAN_SUPPORT
         fanSetup();

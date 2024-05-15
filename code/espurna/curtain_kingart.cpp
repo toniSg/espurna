@@ -35,6 +35,8 @@ Copyright (C) 2020 - Eric Chauvet
 #define CURTAIN_POSITION_UNKNOWN     -1
 // <--
 
+namespace {
+
 #define KINGART_DEBUG_MSG_P(...) do { if (_curtain_debug_flag) { DEBUG_MSG_P(__VA_ARGS__); } } while(0)
 
 Stream* _curtain_port { nullptr };
@@ -57,23 +59,23 @@ bool _curtain_initial_position_set  = false; //Flag to detect if we manage to se
 // Calculated behaviour depending on KA switch, MQTT and UI actions
 bool _curtain_moving                = true;
 
-//Enable more traces, true as a default and stopped when curtain is setup.
+// Enable more traces when setting up, but disabled afterwards
 bool _curtain_debug_flag = true;
 
 #if WEB_SUPPORT
-bool _curtain_report_ws = true; //This will init curtain control and flag the web ui update
-#endif // WEB_SUPPORT
+bool _curtain_report_ws = true;
+#endif
 
 
 //------------------------------------------------------------------------------
 void curtainUpdateUI() {
 #if WEB_SUPPORT
     _curtain_report_ws = true;
-#endif // WEB_SUPPORT
+#endif
 }
 
 //------------------------------------------------------------------------------
-int setButtonFromSwitchText(String & text) {
+int setButtonFromSwitchText(const String& text) {
     if(text == "on")
         return CURTAIN_BUTTON_OPEN;
     else if(text == "off")
@@ -173,7 +175,7 @@ void _KAStopMoving() {
             }
         }
         _curtain_initial_position_set = true;
-        _curtain_debug_flag = false; //Disable debug - user has could ask for it
+        _curtain_debug_flag = false;
     } else if(_curtain_position_set != CURTAIN_POSITION_UNKNOWN && _curtain_position_set != getSetting("curtainBootPos", _curtain_position_set)) {
            setSetting("curtainBootPos", _curtain_last_position); //Remeber last position in case of power loss
     }
@@ -319,10 +321,9 @@ void _KACurtainResult() {
     if(_curtain_position != CURTAIN_POSITION_UNKNOWN && _curtain_last_position != _curtain_position) {
         _curtain_last_position = _curtain_position;
 
-        #if MQTT_SUPPORT
-        const String pos = String(_curtain_last_position);
-        mqttSend(MQTT_TOPIC_CURTAIN, pos.c_str());
-        #endif // MQTT_SUPPORT
+#if MQTT_SUPPORT
+        mqttSend(MQTT_TOPIC_CURTAIN, String(_curtain_last_position, 10).c_str());
+#endif
     }
 
     //Reset last button to make the algorithm work and set last button state
@@ -405,11 +406,6 @@ void _curtainWebSocketUpdate(JsonObject& root) {
 }
 
 //------------------------------------------------------------------------------
-void _curtainWebSocketStatus(JsonObject& root) {
-    _curtainWebSocketUpdate(root);
-}
-
-//------------------------------------------------------------------------------
 void _curtainWebSocketOnAction(uint32_t client_id, const char * action, JsonObject& data) {
 
     if (strcmp(action, "curtainAction") == 0) {
@@ -434,7 +430,7 @@ void _curtainWebSocketOnVisible(JsonObject& root) {
 // -----------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
-void _KACurtainLoop() {
+static void _KACurtainLoop() {
 
     if(_KACurtainReceiveUART()) {
         _KACurtainResult();
@@ -448,19 +444,25 @@ void _KACurtainLoop() {
     }
 
 #if WEB_SUPPORT
-    if (_curtain_report_ws) { //Launch a websocket update
+    if (_curtain_report_ws) {
         wsPost(_curtainWebSocketUpdate);
         _curtain_report_ws = false;
     }
  #endif
 }
 
-// -----------------------------------------------------------------------------
-// Public
-// -----------------------------------------------------------------------------
+void _curtainUpdate(size_t id, int value) {
+    if (id == 0) {
+        _KACurtainSet(CURTAIN_BUTTON_UNKNOWN, std::clamp(value, 0, 100));
+    }
+}
+
+size_t _curtainCount() {
+    return 1;
+}
 
 //------------------------------------------------------------------------------
-void kingartCurtainSetup() {
+void _kingartCurtainSetup() {
     const auto port = uartPort(KINGART_CURTAIN_PORT - 1);
     if (!port || (!port->tx || !port->rx)) {
         return;
@@ -485,17 +487,24 @@ void kingartCurtainSetup() {
 
     // Register loop to poll the UART for new messages
     espurnaRegisterLoop(_KACurtainLoop);
-
 }
 
-//------------------------------------------------------------------------------
-void curtainSetPosition(unsigned char id, int value) {
-    if (id > 1) return;
-    _KACurtainSet(CURTAIN_BUTTON_UNKNOWN, std::clamp(value, 0, 100));
+} // namespace
+
+// -----------------------------------------------------------------------------
+// Public
+// -----------------------------------------------------------------------------
+
+void curtainSetup() {
+    _kingartCurtainSetup();
 }
 
-unsigned char curtainCount() {
-    return 1;
+size_t curtainCount() {
+    return _curtainCount();
+}
+
+void curtainUpdate(unsigned char id, int value) {
+    _curtainUpdate(id, value);
 }
 
 #endif // KINGART_CURTAIN_SUPPORT
