@@ -25,6 +25,28 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+std::remainder implementation for Cores <3.x.x
+
+Orinal copyright info follows:
+
+Copyright 2010 The Go Authors. All rights reserved.
+Use of this source code is governed by a BSD-style
+license that can be found in the LICENSE file.
+
+The original C code and the comment below are from
+FreeBSD's /usr/src/lib/msun/src/e_remainder.c and came
+with this notice. The go code is a simplified version of
+the original C.
+
+====================================================
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+Developed at SunPro, a Sun Microsystems, Inc. business.
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+====================================================
+
 */
 
 #pragma once
@@ -151,23 +173,9 @@ double fmod(double x) {
 #endif
 
 double remainder(double x, double y) {
-// The original C code and the comment below are from
-// FreeBSD's /usr/src/lib/msun/src/e_remainder.c and came
-// with this notice. The go code is a simplified version of
-// the original C.
-//
-// ====================================================
-// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
-//
-// Developed at SunPro, a Sun Microsystems, Inc. business.
-// Permission to use, copy, modify, and distribute this
-// software is freely granted, provided that this notice
-// is preserved.
-// ====================================================
-// 
-// need local implementation b/c __ieee754_remainder missing from 2.7.4
+// need local implementation b/c __ieee754_remainder missing from libc shipped with 2.7.4
 #if __cplusplus < 201411L
-	constexpr double TinyValue { 4.45014771701440276618e-308 }; // 0x0020000000000000
+    constexpr double TinyValue { 4.45014771701440276618e-308 }; // 0x0020000000000000
     constexpr double HalfMax { std::numeric_limits<double>::max() / 2.0 };
 
     if (std::isnan(x) || std::isnan(y) || std::isinf(x) || y == 0.0) {
@@ -179,45 +187,45 @@ double remainder(double x, double y) {
     }
 
     bool sign { false };
-	if (x < 0) {
-		sign = true;
-		x = -x;
-	}
+    if (x < 0) {
+        sign = true;
+        x = -x;
+    }
 
-	if (y < 0) {
-		y = -y;
-	}
+    if (y < 0) {
+        y = -y;
+    }
 
-	if (x == y) {
+    if (x == y) {
         return sign ? -0.0 : 0.0;
-	}
+    }
 
-	if (y <= HalfMax) {
-		x = fmod(x, y + y); // now x < 2y
-	}
+    if (y <= HalfMax) {
+        x = fmod(x, y + y); // now x < 2y
+    }
 
-	if (y < TinyValue) {
-		if ((x + x) > y) {
-			x -= y;
-			if ((x + x) >= y) {
-				x -= y;
-			}
-		}
-	} else {
-		auto half = y / 2.0;
-		if (x > half) {
-			x -= y;
-			if (x >= half) {
-				x -= y;
-			}
-		}
-	}
+    if (y < TinyValue) {
+        if ((x + x) > y) {
+            x -= y;
+            if ((x + x) >= y) {
+                x -= y;
+            }
+        }
+    } else {
+        auto half = y / 2.0;
+        if (x > half) {
+            x -= y;
+            if (x >= half) {
+                x -= y;
+            }
+        }
+    }
 
-	if (sign) {
-		x = -x;
-	}
+    if (sign) {
+        x = -x;
+    }
 
-	return x;
+    return x;
 #else
     return std::remainder(x, y);
 #endif
