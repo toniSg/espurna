@@ -490,4 +490,30 @@ inline Span<T> make_span(const std::vector<T>& data) {
     return Span<T>(const_cast<T*>(data.data()), data.size());
 }
 
+struct SplitStringView {
+    explicit SplitStringView(StringView view) :
+        _source(view)
+    {}
+
+    SplitStringView(StringView view, char delim) :
+        _source(view),
+        _delim(delim)
+    {}
+
+    StringView current() const {
+        return _current;
+    }
+
+    bool next();
+
+private:
+    StringView _source;
+
+    StringView _view { _source };
+    char _delim { ' ' };
+
+    StringView _current;
+};
+
+
 } // namespace espurna
