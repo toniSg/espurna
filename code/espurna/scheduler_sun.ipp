@@ -112,10 +112,6 @@ double acos(double x) {
     return Pi2 - asin(x);
 }
 
-double sin(double x) {
-    return std::sin(x);
-}
-
 double cos(double x) {
     return fs_cos(x);
 }
@@ -140,10 +136,6 @@ double acos(double x) {
     return std::acos(x);
 }
 
-double sin(double x) {
-    return std::sin(x);
-}
-
 double cos(double x) {
     return std::cos(x);
 }
@@ -158,12 +150,90 @@ double fmod(double x) {
 
 #endif
 
+double remainder(double x, double y) {
+// The original C code and the comment below are from
+// FreeBSD's /usr/src/lib/msun/src/e_remainder.c and came
+// with this notice. The go code is a simplified version of
+// the original C.
+//
+// ====================================================
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+//
+// Developed at SunPro, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this
+// software is freely granted, provided that this notice
+// is preserved.
+// ====================================================
+// 
+// need local implementation b/c __ieee754_remainder missing from 2.7.4
+#if __cplusplus < 201411L
+	constexpr double TinyValue { 4.45014771701440276618e-308 }; // 0x0020000000000000
+    constexpr double HalfMax { std::numeric_limits<double>::max() / 2.0 };
+
+    if (std::isnan(x) || std::isnan(y) || std::isinf(x) || y == 0.0) {
+        return NaN;
+    }
+
+    if (std::isinf(y)) {
+        return x;
+    }
+
+    bool sign { false };
+	if (x < 0) {
+		sign = true;
+		x = -x;
+	}
+
+	if (y < 0) {
+		y = -y;
+	}
+
+	if (x == y) {
+        return sign ? -0.0 : 0.0;
+	}
+
+	if (y <= HalfMax) {
+		x = fmod(x, y + y); // now x < 2y
+	}
+
+	if (y < TinyValue) {
+		if ((x + x) > y) {
+			x -= y;
+			if ((x + x) >= y) {
+				x -= y;
+			}
+		}
+	} else {
+		auto half = y / 2.0;
+		if (x > half) {
+			x -= y;
+			if (x >= half) {
+				x -= y;
+			}
+		}
+	}
+
+	if (sign) {
+		x = -x;
+	}
+
+	return x;
+#else
+    return std::remainder(x, y);
+#endif
+}
+
+double sin(double x) {
+    return std::sin(x);
+}
+
 } // namespace math
 
 using math::acos;
 using math::asin;
 using math::cos;
 using math::fmod;
+using math::remainder;
 using math::sin;
 using math::sqrt;
 
@@ -218,7 +288,7 @@ double solar_transit(double d, double solarAnomaly, double eclipticLongitude) {
 
 // Angle of the sun in degrees relative to the earth for the specified Julian day
 double solar_mean_anomaly(double d) {
-    double out = std::remainder(357.5291 + 0.98560028 * (d - JD2000), 360.0);
+    double out = remainder(357.5291 + 0.98560028 * (d - JD2000), 360.0);
     if (out < 0.0) {
         out += 360.0;
     }

@@ -392,8 +392,7 @@ bool enabled(size_t index) {
 }
 
 Type type(size_t index) {
-    using espurna::scheduler::settings::keys::Type;
-    return getSetting({Type, index}, Type::None);
+    return getSetting({espurna::scheduler::settings::keys::Type, index}, Type::None);
 }
 
 int target(size_t index) {
