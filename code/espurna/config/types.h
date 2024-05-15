@@ -225,15 +225,6 @@
 #define LIGHT_PROVIDER_CUSTOM       3
 
 // -----------------------------------------------------------------------------
-// SCHEDULER
-// -----------------------------------------------------------------------------
-
-#define SCHEDULER_TYPE_NONE         scheduler::Type::None
-#define SCHEDULER_TYPE_RELAY        scheduler::Type::Relay
-#define SCHEDULER_TYPE_CHANNEL      scheduler::Type::Channel
-#define SCHEDULER_TYPE_CURTAIN      scheduler::Type::Curtain
-
-// -----------------------------------------------------------------------------
 // IR
 // -----------------------------------------------------------------------------
 

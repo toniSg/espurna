@@ -1382,19 +1382,34 @@
 // -----------------------------------------------------------------------------
 
 #ifndef SCHEDULER_SUPPORT
-#define SCHEDULER_SUPPORT           1               // Enable scheduler (2.45Kb)
+#define SCHEDULER_SUPPORT              1            // Enable scheduler (~13.7Kb)
 #endif
 
 #ifndef SCHEDULER_MAX_SCHEDULES
-#define SCHEDULER_MAX_SCHEDULES     10              // Max schedules allowed
+#define SCHEDULER_MAX_SCHEDULES        10           // Maximum number of configured schedules (both enabled or disabled)
 #endif
 
-#ifndef SCHEDULER_RESTORE_LAST_SCHEDULE
-#define SCHEDULER_RESTORE_LAST_SCHEDULE      0      // Restore the last schedule state on the device boot
+#ifndef SCHEDULER_RESTORE_DAYS
+#define SCHEDULER_RESTORE_DAYS         1            // By default, restore routine would check 00:00..NOW and previous day 00:00..23:59
+                                                    // When set to 0, would check only the 00:00..NOW
+                                                    // (checks today and one day before by default)
 #endif
 
-#ifndef SCHEDULER_WEEKDAYS
-#define SCHEDULER_WEEKDAYS          "1,2,3,4,5,6,7" // (Default - Run the schedules every day)
+#ifndef SCHEDULER_SUN_SUPPORT
+#define SCHEDULER_SUN_SUPPORT          0            // Support 'sunrise' and 'sunset' time keywords
+                                                    // (disabled by default, modify values below for device location)
+#endif
+
+#ifndef SCHEDULER_LATITUDE
+#define SCHEDULER_LATITUDE             51.503399    // Required for sunrise and sunset calculation to work 
+#endif
+
+#ifndef SCHEDULER_LONGITUDE
+#define SCHEDULER_LONGITUDE            -0.119519    // Required for sunrise and sunset calculation to work
+#endif
+
+#ifndef SCHEDULER_ALTITUDE
+#define SCHEDULER_ALTITUDE             0.0          // Not necessary, but usually this produces a more precise time.
 #endif
 
 // -----------------------------------------------------------------------------
