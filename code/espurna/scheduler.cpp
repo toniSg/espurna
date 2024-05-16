@@ -601,6 +601,8 @@ void migrate(int version) {
 #if SCHEDULER_SUN_SUPPORT
 namespace sun {
 
+STRING_VIEW_INLINE(Module, "sun");
+
 void setup() {
     location.latitude = settings::latitude();
     location.longitude = settings::longitude();
@@ -953,6 +955,13 @@ bool onKey(StringView key, const JsonVariant&) {
 
 void onVisible(JsonObject& root) {
     wsPayloadModule(root, settings::Prefix);
+#if SCHEDULER_SUN_SUPPORT
+    wsPayloadModule(root, sun::Module);
+#endif
+
+    for (const auto& pair : settings::Settings) {
+        root[pair.key()] = pair.value();
+    }
 }
 
 void onConnected(JsonObject& root){
