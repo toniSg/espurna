@@ -77,7 +77,7 @@ bool match(const DateMatch& lhs, const tm& rhs) {
         return lhs.day_index[datetime::day_index(rhs.tm_mday)];
     }
 
-    if (lhs.day[0]) { 
+    if (lhs.day[0]) {
         const auto day = datetime::last_day(rhs);
         if (lhs.day.count() > 1) {
             return lhs.day[1 + day - rhs.tm_mday];

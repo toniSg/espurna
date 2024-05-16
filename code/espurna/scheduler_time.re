@@ -107,7 +107,7 @@ loop:
         goto consume_last;
       }
 
-      * { 
+      * {
         out = false;
         goto return_out;
       }
@@ -156,7 +156,7 @@ take_range:
     last = -1;
 
     goto loop;
- 
+
 consume_last:
     // validate w/ range
     if ((last != -1) && !range.valid(last)) {
@@ -288,7 +288,7 @@ loop:
         goto consume_last;
       }
 
-      * { 
+      * {
         out = false;
         goto return_out;
       }
@@ -316,7 +316,7 @@ take_range:
     }
 
     goto return_out;
- 
+
 consume_last:
     // fill output with {range_last}..{last}
     // similar to generic range parser, support inverse fill

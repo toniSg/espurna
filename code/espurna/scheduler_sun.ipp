@@ -94,7 +94,7 @@ float atan(float x) {
 
     xPower *= xSquared;
     accumulator += -0.00749305860992 * xPower;
-    
+
     return offset + x / accumulator;
 }
 
@@ -146,7 +146,7 @@ double fmod(double x, double y) {
     return fs_fmod(x, y);
 }
 
-#else 
+#else
 
 // Everything from stdlib calc below needs
 

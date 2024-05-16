@@ -96,7 +96,7 @@ constexpr bool restore() {
 }
 
 constexpr int restoreDays() {
-    return SCHEDULER_RESTORE_DAYS; 
+    return SCHEDULER_RESTORE_DAYS;
 }
 
 #if SCHEDULER_SUN_SUPPORT
@@ -172,7 +172,7 @@ String serialize(scheduler::v1::Type type) {
     return serialize(scheduler::settings::internal::v1::Types, type);
 }
 
-} // namespace internal 
+} // namespace internal
 } // namespace settings
 } // namespace espurna
 
@@ -527,7 +527,7 @@ String convert_action(Type type, int target, int action) {
     if (prefix.length()) {
         out += prefix.toString()
             + ' ';
-        out += String(target, 10) 
+        out += String(target, 10)
             + ' '
             + String(action, 10);
     }
@@ -1395,7 +1395,7 @@ void setup() {
 
 } // namespace
 } // namespace scheduler
-} // namespace espurna 
+} // namespace espurna
 
 // -----------------------------------------------------------------------------
 

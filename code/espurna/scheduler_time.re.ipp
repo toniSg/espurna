@@ -91,7 +91,7 @@ yy1:
 	++YYCURSOR;
 yy2:
 #line 110 "espurna/scheduler_time.re"
-	{ 
+	{
         out = false;
         goto return_out;
       }
@@ -200,7 +200,7 @@ take_range:
     last = -1;
 
     goto loop;
- 
+
 consume_last:
     // validate w/ range
     if ((last != -1) && !range.valid(last)) {
@@ -300,7 +300,7 @@ yy12:
 	++YYCURSOR;
 yy13:
 #line 291 "espurna/scheduler_time.re"
-	{ 
+	{
         out = false;
         goto return_out;
       }
@@ -737,7 +737,7 @@ take_range:
     }
 
     goto return_out;
- 
+
 consume_last:
     // fill output with {range_last}..{last}
     // similar to generic range parser, support inverse fill
