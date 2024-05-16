@@ -350,6 +350,7 @@ size_t count() {
 }
 
 void gc(size_t total) {
+    DEBUG_MSG_P(PSTR("[SCH] Registered %zu schedule(s)\n"), total);
     for (size_t index = total; index < build::max(); ++index) {
         for (auto setting : IndexedSettings) {
             delSetting({setting.prefix(), index});
@@ -1302,11 +1303,8 @@ void tick(NtpTick tick) {
 
     auto ctx = datetime::make_context(now());
 
-    auto count = settings::count();
     if (initial) {
-        DEBUG_MSG_P(PSTR("[SCH] Registered %zu schedule(s)\n"), count);
-
-        settings::gc(count);
+        settings::gc(settings::count());
 
 #if SCHEDULER_SUN_SUPPORT
         sun::before_restore(ctx);
