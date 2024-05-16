@@ -454,6 +454,10 @@
 #define RELAY_MQTT_DISCONNECT_STATUS    RELAY_MQTT_DISCONNECT_NONE
 #endif
 
+#ifndef RELAY_MQTT_DISCONNECT_DELAY
+#define RELAY_MQTT_DISCONNECT_DELAY     duration::Seconds(30)
+#endif
+
 //------------------------------------------------------------------------------
 // BUTTON
 //------------------------------------------------------------------------------
