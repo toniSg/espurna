@@ -267,7 +267,31 @@ ID_VALUE(restore, settings::restore)
 
 #undef ID_VALUE
 
+#define EXACT_VALUE(NAME, FUNC)\
+String NAME () {\
+    return espurna::settings::internal::serialize(FUNC());\
+}
+
+EXACT_VALUE(restoreDays, settings::restoreDays);
+
+#if SCHEDULER_SUN_SUPPORT
+EXACT_VALUE(latitude, settings::latitude);
+EXACT_VALUE(longitude, settings::longitude);
+EXACT_VALUE(altitude, settings::altitude);
+#endif
+
+#undef EXACT_VALUE
+
 } // namespace internal
+
+static constexpr espurna::settings::query::Setting Settings[] PROGMEM {
+    {keys::Days, internal::restoreDays},
+#if SCHEDULER_SUN_SUPPORT
+    {keys::Latitude, internal::latitude},
+    {keys::Longitude, internal::longitude},
+    {keys::Altitude, internal::altitude},
+#endif
+};
 
 static constexpr espurna::settings::query::IndexedSetting IndexedSettings[] PROGMEM {
     {keys::Type, internal::type},
@@ -356,6 +380,21 @@ void gc(size_t total) {
             delSetting({setting.prefix(), index});
         }
     }
+}
+
+bool checkSamePrefix(StringView key) {
+    return key.startsWith(settings::Prefix);
+}
+
+espurna::settings::query::Result findFrom(StringView key) {
+    return espurna::settings::query::findFrom(Settings, key);
+}
+
+void setup() {
+    ::settingsRegisterQueryHandler({
+        .check = checkSamePrefix,
+        .get = findFrom,
+    });
 }
 
 } // namespace settings
@@ -689,7 +728,7 @@ PROGMEM_STRING(Dump, "SCHEDULE");
 
 static void dump(::terminal::CommandContext&& ctx) {
     if (ctx.argv.size() != 2) {
-        terminalError(ctx, STRING_VIEW("SCHEDULE <ID>").toString());
+        settingsDump(ctx, settings::Settings);
         return;
     }
 
@@ -1327,6 +1366,7 @@ void tick(NtpTick tick) {
 
 void setup() {
     migrateVersion(scheduler::settings::migrate);
+    settings::setup();
 
 #if SCHEDULER_SUN_SUPPORT
     sun::setup();
