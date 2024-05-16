@@ -374,6 +374,7 @@ STRING_VIEW_INLINE(Target, "schTarget");
 STRING_VIEW_INLINE(Hour, "schHour");
 STRING_VIEW_INLINE(Minute, "schMinute");
 STRING_VIEW_INLINE(Weekdays, "schWDs");
+STRING_VIEW_INLINE(UTC, "schUTC");
 
 static constexpr std::array<StringView, 5> List {
     Enabled,
@@ -416,9 +417,13 @@ String weekdays(size_t index) {
     return getSetting({keys::Weekdays, index}, DefaultWeekdays);
 }
 
+bool utc(size_t index) {
+    return getSetting({keys::UTC, index}, false);
+}
+
 } // namespace settings
 
-String convert_time(const String& weekdays, int hour, int minute) {
+String convert_time(const String& weekdays, int hour, int minute, bool utc) {
     String out;
 
     // implicit mon..sun already by default
@@ -439,6 +444,10 @@ String convert_time(const String& weekdays, int hour, int minute) {
     }
 
     out += String(minute, 10);
+
+    if (utc) {
+        out += STRING_VIEW(" UTC");
+    }
 
     return out;
 }
@@ -517,7 +526,8 @@ void migrate() {
         setSetting({scheduler::settings::keys::Time, index},
             convert_time(settings::weekdays(index),
                 settings::hour(index),
-                settings::minute(index)));
+                settings::minute(index),
+                settings::utc(index)));
 
         setSetting({scheduler::settings::keys::Action, index},
             convert_action(type,
