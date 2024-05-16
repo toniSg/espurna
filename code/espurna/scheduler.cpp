@@ -96,7 +96,7 @@ constexpr bool restore() {
 }
 
 constexpr int restoreDays() {
-    return - (SCHEDULER_RESTORE_DAYS); 
+    return SCHEDULER_RESTORE_DAYS; 
 }
 
 #if SCHEDULER_SUN_SUPPORT
