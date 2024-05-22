@@ -122,7 +122,7 @@ constexpr Type type() {
 }
 
 constexpr bool restore() {
-    return false;
+    return 1 == SCHEDULER_RESTORE;
 }
 
 constexpr int restoreDays() {

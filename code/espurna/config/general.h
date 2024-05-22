@@ -1393,6 +1393,11 @@
 #define SCHEDULER_MAX_SCHEDULES        10           // Maximum number of configured schedules (both enabled or disabled)
 #endif
 
+#ifndef SCHEDULER_RESTORE
+#define SCHEDULER_RESTORE              0            // Restore the last schedule state on the device boot
+                                                    // (disabled by default)
+#endif
+
 #ifndef SCHEDULER_RESTORE_DAYS
 #define SCHEDULER_RESTORE_DAYS         1            // By default, restore routine would check 00:00..NOW and previous day 00:00..23:59
                                                     // When set to 0, would check only the 00:00..NOW
