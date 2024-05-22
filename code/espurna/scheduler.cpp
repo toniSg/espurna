@@ -1296,12 +1296,18 @@ void run_delta(Context& ctx) {
     }
 
     const auto days = settings::restoreDays();
-    for (int day = 0; (day < days) && !ctx.pending.empty(); ++day) {
+    for (int day = 0; day < days; ++day) {
         if (!ctx.next()) {
             break;
         }
 
-        handle_delta(ctx, ctx.pending.begin());
+        for (auto it = ctx.pending.begin(); it != ctx.pending.end();) {
+            if (handle_delta(ctx, *it)) {
+                it = ctx.pending.erase(it);
+            } else {
+                it = std::next(it);
+            }
+        }
     }
 }
 
