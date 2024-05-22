@@ -15,14 +15,21 @@ Copyright (C) 2019-2024 by Maxim Prokhorov <prokhorov dot max at outlook dot com
 
 #include "api.h"
 #include "datetime.h"
-#include "light.h"
 #include "mqtt.h"
 #include "ntp.h"
 #include "ntp_timelib.h"
 #include "curtain_kingart.h"
-#include "relay.h"
 #include "scheduler.h"
 #include "ws.h"
+
+#if TERMINAL_SUPPORT == 0
+#if LIGHT_PROVIDER != LIGHT_PROVIDER_NONE
+#include "light.h"
+#endif
+#if RELAY_SUPPORT
+#include "relay.h"
+#endif
+#endif
 
 #include "libs/EphemeralPrint.h"
 #include "libs/PrintString.h"
