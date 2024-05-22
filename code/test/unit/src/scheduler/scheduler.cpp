@@ -420,14 +420,20 @@ void test_keyword_parsing() {
 void test_restore_today() {
     MAKE_RESTORE_CONTEXT(ctx, schedule);
 
-    schedule.time.flags = 0;
+    const auto original_date = schedule.date;
+
+    schedule.date = DateMatch{};
+    schedule.date.day[15] = true;
+    schedule.date.month[0] = true;
+    schedule.date.year = 2006;
 
     TEST_ASSERT_FALSE(handle_today(ctx, 0, schedule));
     TEST_ASSERT_EQUAL(1, ctx.pending.size());
     TEST_ASSERT_EQUAL(0, ctx.results.size());
 
+    schedule.date = original_date;
+
     ctx.pending.clear();
-    schedule.time.flags = scheduler::FlagUtc;
 
     TEST_ASSERT_TRUE(handle_today(ctx, 0, schedule));
     TEST_ASSERT_EQUAL(0, ctx.pending.size());
