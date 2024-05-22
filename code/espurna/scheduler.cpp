@@ -73,17 +73,41 @@ bool initial { true };
 #if SCHEDULER_SUN_SUPPORT
 namespace sun {
 
+// scheduler itself has minutes precision, while seconds are used in debug and calculations
+struct Event {
+    datetime::Minutes minutes{ -1 };
+    datetime::Seconds seconds{ -1 };
+};
+
+datetime::Seconds event_seconds(const Event& event) {
+    return std::chrono::duration_cast<datetime::Seconds>(event.minutes) + event.seconds;
+}
+
+bool event_valid(const Event& event) {
+    return (event.minutes > datetime::Minutes::zero())
+        && (event.seconds > datetime::Seconds::zero());
+}
+
+struct EventMatch {
+    datetime::Date date;
+    TimeMatch time;
+    Event last;
+};
+
 struct Match {
-    TimeMatch m;
-    time_t timestamp { -1 };
+    EventMatch rising;
+    EventMatch setting;
 };
 
 Location location;
-
-Match match_rising;
-Match match_setting;
+Match match;
 
 void setup();
+
+void reset() {
+    match.rising = EventMatch{};
+    match.setting = EventMatch{};
+}
 
 } // namespace sun
 #endif
@@ -181,22 +205,6 @@ String serialize(scheduler::v1::Type type) {
 
 } // namespace internal
 } // namespace settings
-} // namespace espurna
-
-namespace espurna {
-namespace scheduler {
-namespace {
-
-struct Schedule {
-    DateMatch date;
-    WeekdayMatch weekdays;
-    TimeMatch time;
-
-    bool ok { false };
-};
-
-} // namespace
-} // namespace scheduler
 } // namespace espurna
 
 namespace espurna {
@@ -616,112 +624,196 @@ void setup() {
     location.altitude = settings::altitude();
 }
 
-void update_match(Match& match, time_t timestamp) {
-    tm tmp{};
-    gmtime_r(&timestamp, &tmp);
+EventMatch* find_event_match(const TimeMatch& m) {
+    if (want_sunrise(m)) {
+        return &match.rising;
+    } else if (want_sunset(m)) {
+        return &match.setting;
+    }
 
-    match.timestamp = timestamp;
-
-    match.m.hour.reset();
-    match.m.hour[tmp.tm_hour] = true;
-
-    match.m.minute.reset();
-    match.m.minute[tmp.tm_min] = true;
-
-    match.m.flags = FlagUtc;
+    return nullptr;
 }
 
-// keep existing sunrise and sunset timestamp for at least a minute
-bool needs_update(time_t timestamp) {
-    return ((match_rising.timestamp < (timestamp + 60))
-         || (match_setting.timestamp < (timestamp + 60)));
+EventMatch* find_event_match(const Schedule& schedule) {
+    return find_event_match(schedule.time);
 }
 
-template <typename T>
-void delta_compare(tm& out, time_t, T);
+tm time_point_from_seconds(datetime::Seconds seconds) {
+    tm out{};
+    time_t timestamp{ seconds.count() };
+    gmtime_r(&timestamp, &out);
 
-template <>
-void delta_compare(tm& out, time_t timestamp, std::greater<time_t>) {
-    datetime::delta_utc(
-        out, datetime::Seconds{ timestamp },
-        datetime::Days{ 1 });
+    return out;
 }
 
-template <>
-void delta_compare(tm& out, time_t timestamp, std::less<time_t>) {
-    datetime::delta_utc(
-        out, datetime::Seconds{ timestamp },
-        datetime::Days{ -1 });
+Event make_invalid_event() {
+    Event out;
+
+    out.seconds = datetime::Seconds{ -1 };
+    out.minutes = datetime::Minutes{ -1 };
+
+    return out;
 }
 
-template <typename T>
-void update(time_t timestamp, const tm& today, T compare) {
-    auto result = sun::sunrise_sunset(location, today);
-    if ((result.sunrise < 0) || (result.sunset < 0)) {
-        DEBUG_MSG_P(PSTR("[SCH] Sunrise and sunset cannot be calculated\n"));
+Event make_event(datetime::Seconds seconds) {
+    Event out;
+
+    out.seconds = seconds;
+    out.minutes =
+        std::chrono::duration_cast<datetime::Minutes>(out.seconds);
+    out.seconds -= out.minutes;
+
+    return out;
+}
+
+datetime::Date date_point(const tm& time_point) {
+    datetime::Date out;
+
+    out.year = time_point.tm_year + 1900;
+    out.month = time_point.tm_mon + 1;
+    out.day = time_point.tm_mday;
+
+    return out;
+}
+
+TimeMatch time_match(const tm& time_point) {
+    TimeMatch out;
+
+    out.hour[time_point.tm_hour] = true;
+    out.minute[time_point.tm_min] = true;
+    out.flags = FlagUtc;
+
+    return out;
+}
+
+void update_event_match(EventMatch& match, datetime::Seconds seconds) {
+    if (seconds <= datetime::Seconds::zero()) {
+        match.last = make_invalid_event();
         return;
     }
 
-    if (compare(timestamp, result.sunrise) || compare(timestamp, result.sunset)) {
+    const auto time_point = time_point_from_seconds(seconds);
+    match.date = date_point(time_point);
+    match.time = time_match(time_point);
+
+    match.last = make_event(seconds);
+}
+
+void update_schedule_from(Schedule& schedule, const EventMatch& match) {
+    schedule.date.day[match.date.day] = true;
+    schedule.date.month[match.date.month] = true;
+    schedule.date.year = match.date.year;
+    schedule.time = match.time;
+}
+
+bool update_schedule(Schedule& schedule) {
+    // if not sun{rise,set} schedule, keep it as-is
+    const auto* selected = sun::find_event_match(schedule);
+    if (nullptr == selected) {
+        return false;
+    }
+
+    // in case calculation failed, no use here
+    if (!event_valid((*selected).last)) {
+        return false;
+    }
+
+    // make sure event can actually trigger with this date spec
+    if (::espurna::scheduler::match(schedule.date, (*selected).date)) {
+        update_schedule_from(schedule, *selected);
+        return true;
+    }
+
+    return false;
+}
+
+bool needs_update(datetime::Minutes minutes) {
+    return ((match.rising.last.minutes < minutes)
+         || (match.setting.last.minutes < minutes));
+}
+
+template <typename T>
+void delta_compare(tm& out, datetime::Minutes, T);
+
+void update(datetime::Minutes minutes, const tm& today) {
+    const auto result = sun::sunrise_sunset(location, today);
+    update_event_match(match.rising, result.sunrise);
+    update_event_match(match.setting, result.sunset);
+}
+
+template <typename T>
+void update(datetime::Minutes minutes, const tm& today, T compare) {
+    auto result = sun::sunrise_sunset(location, today);
+    if ((result.sunrise.count() < 0) || (result.sunset.count() < 0)) {
+        return;
+    }
+
+    if (compare(minutes, result.sunrise) || compare(minutes, result.sunset)) {
         tm tmp;
         std::memcpy(&tmp, &today, sizeof(tmp));
-        delta_compare(tmp, timestamp, compare);
+        delta_compare(tmp, minutes, compare);
 
         const auto other = sun::sunrise_sunset(location, tmp);
-        if ((other.sunrise < 0) || (other.sunset < 0)) {
-            DEBUG_MSG_P(PSTR("[SCH] Sunrise and sunset cannot be calculated\n"));
+        if ((other.sunrise.count() < 0) || (other.sunset.count() < 0)) {
             return;
         }
 
-        if (compare(timestamp, result.sunrise)) {
+        if (compare(minutes, result.sunrise)) {
             result.sunrise = other.sunrise;
         }
 
-        if (compare(timestamp, result.sunset)) {
+        if (compare(minutes, result.sunset)) {
             result.sunset = other.sunset;
         }
     }
 
-    update_match(match_rising, result.sunrise);
-    update_match(match_setting, result.sunset);
+    update_event_match(match.rising, result.sunrise);
+    update_event_match(match.setting, result.sunset);
 }
 
-// restoration needs timestamps in the past, ensure sun matchers are before current timestamp
-void before_restore(const datetime::Context& ctx) {
-    update(ctx.timestamp, ctx.utc, std::less<time_t>{});
+template <typename T>
+void update(time_t timestamp, const tm& today, T&& compare) {
+    update(datetime::Seconds{ timestamp }, today, std::forward<T>(compare));
+}
 
-    if (match_rising.timestamp > 0) {
-        DEBUG_MSG_P(PSTR("[SCH] Previous sunrise at %s\n"),
-            datetime::format_local(match_rising.timestamp).c_str());
+String format_match(const EventMatch& match) {
+    return datetime::format_local(event_seconds(match.last).count());
+}
+
+// check() needs current or future events, discard timestamps in the past
+// std::greater is type-fixed, make sure minutes vs. seconds actually works
+struct CheckCompare {
+    bool operator()(const datetime::Minutes& lhs, const datetime::Seconds& rhs) {
+        return lhs > rhs;
     }
+};
 
-    if (match_setting.timestamp > 0) {
-        DEBUG_MSG_P(PSTR("[SCH] Previous sunset at %s\n"),
-            datetime::format_local(match_setting.timestamp).c_str());
-    }
+template <>
+void delta_compare(tm& out, datetime::Minutes minutes, CheckCompare) {
+    datetime::delta_utc(
+        out, datetime::Seconds{ minutes },
+        datetime::Days{ 1 });
 }
 
-void after_restore() {
-    match_rising = Match{};
-    match_setting = Match{};
-}
+void update_after(const datetime::Context& ctx) {
+    const auto seconds = datetime::Seconds{ ctx.timestamp };
+    const auto minutes =
+        std::chrono::duration_cast<datetime::Minutes>(seconds);
 
-// while check needs timestamps in the future
-void before_check(const datetime::Context& ctx) {
-    if (!needs_update(ctx.timestamp)) {
+    if (!needs_update(minutes)) {
         return;
     }
 
-    update(ctx.timestamp, ctx.utc, std::greater<time_t>{});
+    update(minutes, ctx.utc, CheckCompare{});
 
-    if (match_rising.timestamp > 0) {
+    if (match.rising.last.minutes.count() > 0) {
         DEBUG_MSG_P(PSTR("[SCH] Sunrise at %s\n"),
-            datetime::format_local(match_rising.timestamp).c_str());
+            format_match(match.rising).c_str());
     }
 
-    if (match_setting.timestamp > 0) {
+    if (match.setting.last.minutes.count() > 0) {
         DEBUG_MSG_P(PSTR("[SCH] Sunset at %s\n"),
-            datetime::format_local(match_setting.timestamp).c_str());
+            format_match(match.setting).c_str());
     }
 }
 
@@ -1130,122 +1222,61 @@ void parse_action(String action) {
 
 #endif
 
-std::bitset<24> mask_past_hours(const std::bitset<24>& lhs, int rhs) {
-    return lhs.to_ulong() & bits::fill_u32(0, rhs);
-}
+namespace restore {
 
-std::bitset<60> mask_past_minutes(const std::bitset<60>& lhs, int rhs) {
-    return lhs.to_ullong() & bits::fill_u64(0, rhs);
-}
-
-TimeMatch mask_past(const TimeMatch& lhs, const tm& rhs) {
-    TimeMatch out;
-    out.hour = mask_past_hours(lhs.hour, rhs.tm_hour);
-    out.minute = mask_past_minutes(lhs.minute, rhs.tm_hour);
-    out.flags = lhs.flags;
-
-    return out;
-}
-
-duration::Minutes to_minutes(int hour, int minute) {
-    return duration::Hours{ hour } + duration::Minutes{ minute };
-}
-
-duration::Minutes to_minutes(const tm& t) {
-    return to_minutes(t.tm_hour, t.tm_min);
-}
-
-bool closest_delta(datetime::Minutes& out, const TimeMatch& lhs, const tm& rhs) {
-    auto past = mask_past(lhs, rhs);
-    if (lhs.hour[rhs.tm_hour]) {
-        auto minute = bits::first_set_u64(past.minute.to_ullong());
-        if (minute == 0) {
-            return false;
-        }
-
-        out = datetime::Minutes{ rhs.tm_min - minute };
-        return true;
-    }
-
-    auto hour = bits::first_set_u32(past.hour.to_ulong());
-    if (hour == 0) {
-        return false;
-    }
-
-    auto minute = bits::first_set_u64(lhs.minute.to_ullong());
-    if (minute == 0) {
-        return false;
-    }
-
-    --hour;
-    --minute;
-
-    out -= to_minutes(rhs) - to_minutes(hour, minute);
-
-    return true;
-}
-
-bool closest_delta_end_of_day(datetime::Minutes& out, const TimeMatch& lhs, const tm& rhs) {
-    tm tmp;
-    std::memcpy(&tmp, &rhs, sizeof(tm));
-
-    tmp.tm_hour = 23;
-    tmp.tm_min = 59;
-    tmp.tm_sec = 59;
-
-    const auto result = closest_delta(out, lhs, tmp);
-    if (result) {
-        out -= datetime::Minutes{ 1 };
-        return true;
-    }
-
-    return false;
-}
-
-const tm& select_time(const datetime::Context& ctx, const Schedule& schedule) {
-    return want_utc(schedule.time)
-        ? ctx.utc
-        : ctx.local;
-}
-
-Schedule load_schedule(size_t index) {
-    auto schedule = settings::schedule(index);
-
+[[gnu::used]]
+void Context::init() {
 #if SCHEDULER_SUN_SUPPORT
-    if (schedule.ok) {
-        if (want_sunrise(schedule.time)) {
-            schedule.time = sun::match_rising.m;
-        } else if (want_sunset(schedule.time)) {
-            schedule.time = sun::match_setting.m;
-        }
+    const auto seconds = datetime::Seconds{ this->delta.timestamp };
+    const auto minutes =
+        std::chrono::duration_cast<datetime::Minutes>(seconds);
+
+    sun::update(minutes, this->delta.utc);
+#endif
+}
+
+[[gnu::used]]
+void Context::init_delta() {
+#if SCHEDULER_SUN_SUPPORT
+    init();
+
+    for (auto& pending : this->pending) {
+        // additional logic in handle_delta. keeps as pending when current value does not pass date match()
+        pending.schedule.ok =
+            sun::update_schedule(pending.schedule);
     }
 #endif
-
-    return schedule;
 }
 
-struct Restore {
-    size_t index;
-    datetime::Minutes offset;
-    String action;
-};
-
-void update_restore(std::vector<Restore>& out, size_t index, datetime::Minutes offset) {
-    out.push_back(
-        Restore{
-            .index = index,
-            .offset = offset,
-            .action = settings::action(index),
-        });
+[[gnu::used]]
+void Context::destroy() {
+#if SCHEDULER_SUN_SUPPORT
+    sun::reset();
+#endif
 }
 
-std::vector<Restore> prepare_restore(const datetime::Context& today, int extra_days) {
-    std::vector<Restore> out;
+// otherwise, there are pending results that need extra days to check
+void run_delta(Context& ctx) {
+    if (!ctx.pending.size()) {
+        return;
+    }
 
+    const auto days = settings::restoreDays();
+    for (int day = 0; (day < days) && !ctx.pending.empty(); ++day) { 
+        if (!ctx.next()) {
+            break;
+        }
+
+        handle_delta(ctx, ctx.pending.begin());
+    }
+}
+
+// if schedule was due earlier today, make sure this gets checked first
+void run_today(Context& ctx) {
     for (size_t index = 0; index < build::max(); ++index) {
         switch (settings::type(index)) {
         case Type::Unknown:
-            goto return_out;
+            return;
 
         case Type::Disabled:
             continue;
@@ -1258,61 +1289,48 @@ std::vector<Restore> prepare_restore(const datetime::Context& today, int extra_d
             continue;
         }
 
-        const auto schedule = load_schedule(index);
+        auto schedule = settings::schedule(index);
         if (!schedule.ok) {
-            break;
+            continue;
         }
 
-        // In case today was a match, store earliest possible execution time as well as the action itself
-        const auto& today_time = select_time(today, schedule);
-
-        if (match(schedule.date, today_time) && match(schedule.weekdays, today_time)) {
-            datetime::Minutes offset{};
-            if (closest_delta(offset, schedule.time, today_time)) {
-                update_restore(out, index, offset);
-                continue;
-            }
+#if SCHEDULER_SUN_SUPPORT
+        if (!sun::update_schedule(schedule)) {
+            context_pending(ctx, index, schedule);
+            continue;
         }
+#endif
 
-        // Otherwise, check additional number of days
-        datetime::Minutes offset{};
-
-        for (int day = 0; day < extra_days; ++day) {
-            const auto extra = datetime::delta(today, datetime::Days{ -1 - day });
-
-            const auto& time = select_time(extra, schedule);
-            if (match(schedule.date, time) && match(schedule.weekdays, time)) {
-                if (closest_delta_end_of_day(offset, schedule.time, time)) {
-                    offset -= to_minutes(today_time);
-                    update_restore(out, index, offset);
-                }
-            }
-
-            offset -= datetime::Days{ 1 };
-        }
+        handle_today(ctx, index, schedule);
     }
-
-return_out:
-    return out;
 }
 
-void restore(const datetime::Context& ctx) {
-    // pending schedules, in .offset ascending order so oldest ones are executed first
-    auto restored = prepare_restore(ctx, settings::restoreDays());
+void sort(Context& ctx) {
     std::sort(
-        restored.begin(),
-        restored.end(),
-        [](const Restore& lhs, const Restore& rhs) {
+        ctx.results.begin(),
+        ctx.results.end(),
+        [](const Result& lhs, const Result& rhs) {
             return lhs.offset < rhs.offset;
         });
+}
 
-    for (auto& restore : restored) {
+void run(const datetime::Context& base) {
+    Context ctx{ base };
+
+    run_today(ctx);
+    run_delta(ctx);
+    sort(ctx);
+
+    for (auto& result : ctx.results) {
+        const auto action = settings::action(result.index);
         DEBUG_MSG_P(PSTR("[SCH] Restoring #%zu => %s (%sm)\n"),
-            restore.index, restore.action.c_str(),
-            String(restore.offset.count(), 10).c_str());
-        parse_action(restore.action);
+            result.index, action.c_str(),
+            String(result.offset.count(), 10).c_str());
+        parse_action(action);
     }
 }
+
+} // namespace restore
 
 void check(const datetime::Context& ctx) {
     for (size_t index = 0; index < build::max(); ++index) {
@@ -1327,10 +1345,16 @@ void check(const datetime::Context& ctx) {
             break;
         }
 
-        auto schedule = load_schedule(index);
+        auto schedule = settings::schedule(index);
         if (!schedule.ok) {
             continue;
         }
+
+#if SCHEDULER_SUN_SUPPORT
+        if (!sun::update_schedule(schedule)) {
+            continue;
+        }
+#endif
 
         const auto& time = select_time(ctx, schedule);
 
@@ -1359,24 +1383,15 @@ void tick(NtpTick tick) {
     auto ctx = datetime::make_context(now());
 
     if (initial) {
-        settings::gc(settings::count());
-
-#if SCHEDULER_SUN_SUPPORT
-        sun::before_restore(ctx);
-#endif
-
-        restore(ctx);
-
-#if SCHEDULER_SUN_SUPPORT
-        sun::after_restore();
-#endif
-
         initial = false;
+        settings::gc(settings::count());
+        restore::run(ctx);
     }
 
 #if SCHEDULER_SUN_SUPPORT
-    sun::before_check(ctx);
+    sun::update_after(ctx);
 #endif
+
     check(ctx);
 }
 

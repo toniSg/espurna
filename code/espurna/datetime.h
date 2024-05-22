@@ -22,10 +22,7 @@ using Hours = std::chrono::duration<time_t, std::ratio<3600> >;
 using Minutes = std::chrono::duration<time_t, std::ratio<60> >;
 using Seconds = std::chrono::duration<time_t>;
 
-// helper for context time delta calculations
-constexpr Seconds start_of_day_offset(Seconds seconds, Days offset) {
-    return seconds - (seconds - std::chrono::duration_cast<Days>(seconds)) + offset;
-}
+// TODO import std::chrono::{floor,ceil,trunc}
 
 // only -std=c++20 chrono has appropriate class support. until then, use libc tm for full datetime
 // helper for to_days / from_days, where only the yyyy-mm-dd is needed
@@ -42,6 +39,11 @@ constexpr Date make_date(const tm& t) {
         .day = t.tm_mday,
     };
 }
+
+struct HourMinute {
+    int hour;
+    int minute;
+};
 
 // Days since 1970/01/01
 Days to_days(const Date&) noexcept;

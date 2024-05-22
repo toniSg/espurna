@@ -8,8 +8,11 @@
 #include <espurna/scheduler_time.re.ipp>
 #include <espurna/scheduler_common.ipp>
 
-#include <iostream>
+#include <ctime>
+
+#include <array>
 #include <iomanip>
+#include <iostream>
 
 #include <string_view>
 using namespace std::string_view_literals;
@@ -43,15 +46,32 @@ std::ostream& operator<<(std::ostream& out, const tm& t) {
         << ' ' << wday(t.tm_wday) << ' '
         << t.tm_yday << "y "
         << t.tm_hour << ':' << t.tm_min << ':' << t.tm_sec
-        << ((t.tm_isdst == 1) ? "+DST" :
-            (t.tm_isdst == -1) ? "-DST" : "");
+        << ((t.tm_isdst == 1) ? " DST" : "");
 
     return out;
 };
 
 namespace espurna {
-namespace test {
+namespace scheduler {
 namespace {
+
+namespace restore {
+
+[[gnu::used]]
+void Context::init() {
+}
+
+[[gnu::used]]
+void Context::init_delta() {
+}
+
+[[gnu::used]]
+void Context::destroy() {
+}
+
+} // namespace restore
+
+namespace test {
 
 static constexpr auto ReferenceTimestamp = time_t{ 1136239445 };
 
@@ -386,13 +406,138 @@ void test_keyword_parsing() {
     TEST_SCHEDULER_VALID_KEYWORD("Sunset", scheduler::FlagSunset);
 }
 
-} // namespace
+#define MAKE_RESTORE_CONTEXT(CTX, SCHEDULE)\
+    const auto __reference_ctx = datetime::make_context(ReferenceTimestamp);\
+    Schedule SCHEDULE;\
+    SCHEDULE.weekdays.day[datetime::Monday.c_value()] = true;\
+    SCHEDULE.date.day[2] = true;\
+    SCHEDULE.time.hour[15] = true;\
+    SCHEDULE.time.minute[4] = true;\
+    SCHEDULE.time.flags = FlagUtc;\
+    SCHEDULE.ok = true;\
+    auto CTX = restore::Context(__reference_ctx)
+
+void test_restore_today() {
+    MAKE_RESTORE_CONTEXT(ctx, schedule);
+
+    schedule.time.flags = 0;
+
+    TEST_ASSERT_FALSE(handle_today(ctx, 0, schedule));
+    TEST_ASSERT_EQUAL(1, ctx.pending.size());
+    TEST_ASSERT_EQUAL(0, ctx.results.size());
+
+    ctx.pending.clear();
+    schedule.time.flags = scheduler::FlagUtc;
+
+    TEST_ASSERT_TRUE(handle_today(ctx, 0, schedule));
+    TEST_ASSERT_EQUAL(0, ctx.pending.size());
+    TEST_ASSERT_EQUAL(1, ctx.results.size());
+    TEST_ASSERT_EQUAL(0, ctx.results[0].index);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(datetime::Hours(-7)).count(),
+        ctx.results[0].offset.count());
+}
+
+void test_restore_delta_future() {
+    MAKE_RESTORE_CONTEXT(ctx, schedule);
+
+    const auto pending = restore::Pending{.index = 1, .schedule = schedule};
+
+    ctx.next_delta(datetime::Days{ 25 });
+    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_EQUAL(0, ctx.results.size());
+
+    ctx.next_delta(datetime::Days{ -15 });
+    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_EQUAL(0, ctx.results.size());
+
+    ctx.next_delta(datetime::Days{ 0 });
+    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_EQUAL(0, ctx.results.size());
+
+    ctx.next();
+    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_EQUAL(0, ctx.results.size());
+}
+
+void test_restore_delta_past() {
+    struct Expected {
+        size_t index;
+        datetime::Days delta;
+        int day;
+        datetime::Weekday weekday;
+        datetime::Hours hours;
+    };
+
+    constexpr std::array tests{
+        Expected{
+            .index = 123,
+            .delta = datetime::Days{ -1 },
+            .day = 1,
+            .weekday = datetime::Sunday,
+            .hours = datetime::Hours{ -31 }},
+        Expected{
+            .index = 567,
+            .delta = datetime::Days{ -1 },
+            .day = 31,
+            .weekday = datetime::Saturday,
+            .hours = datetime::Hours{ -55 }},
+        Expected{
+            .index = 890,
+            .delta = datetime::Days{ -1 },
+            .day = 30,
+            .weekday = datetime::Friday,
+            .hours = datetime::Hours{ -79 }},
+        Expected{
+            .index = 111,
+            .delta = datetime::Days{ -2 },
+            .day = 28,
+            .weekday = datetime::Wednesday,
+            .hours = datetime::Hours{ -127 }},
+    };
+
+    MAKE_RESTORE_CONTEXT(ctx, schedule);
+
+    for (const auto& test : tests) {
+        schedule.date = scheduler::DateMatch{};
+        schedule.date.day[test.day] = true;
+
+        schedule.weekdays = scheduler::WeekdayMatch{};
+        schedule.weekdays.day[test.weekday.c_value()] = true;
+
+        ctx.next_delta(test.delta);
+
+        TEST_ASSERT_EQUAL(0, ctx.results.size());
+        TEST_ASSERT_EQUAL(0, ctx.pending.size());
+
+        TEST_ASSERT_FALSE(
+            restore::handle_today(ctx, test.index, schedule));
+        TEST_ASSERT_EQUAL(0, ctx.results.size());
+        TEST_ASSERT_EQUAL(1, ctx.pending.size());
+
+        TEST_ASSERT_TRUE(
+            restore::handle_delta(ctx, ctx.pending.begin()));
+        TEST_ASSERT_EQUAL(1, ctx.results.size());
+        TEST_ASSERT_EQUAL(0, ctx.pending.size());
+
+        TEST_ASSERT_EQUAL(test.index, ctx.results[0].index);
+        TEST_ASSERT_EQUAL(
+            datetime::Minutes(test.hours).count(),
+            ctx.results[0].offset.count());
+
+        ctx.results.clear();
+    }
+}
+
 } // namespace test
+
+} // namespace
+} // namespace scheduler
 } // namespace espurna
 
 int main(int, char**) {
     UNITY_BEGIN();
-    using namespace espurna::test;
+    using namespace espurna::scheduler::test;
     RUN_TEST(test_date_day_repeat);
     RUN_TEST(test_date_impl);
     RUN_TEST(test_date_month_glob);
@@ -411,5 +556,8 @@ int main(int, char**) {
     RUN_TEST(test_weekday_invalid_parsing);
     RUN_TEST(test_weekday_offset);
     RUN_TEST(test_weekday_parsing);
+    RUN_TEST(test_restore_today);
+    RUN_TEST(test_restore_delta_future);
+    RUN_TEST(test_restore_delta_past);
     return UNITY_END();
 }

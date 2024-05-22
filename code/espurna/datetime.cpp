@@ -12,6 +12,10 @@ namespace espurna {
 namespace datetime {
 namespace {
 
+constexpr Seconds start_of_day_delta(Seconds seconds, Days delta) {
+    return seconds - (seconds - std::chrono::duration_cast<Days>(seconds)) + delta;
+}
+
 time_t delta_local_impl(tm& out, Days days) {
     out.tm_mday += days.count();
     out.tm_hour = 0;
@@ -24,7 +28,7 @@ time_t delta_local_impl(tm& out, Days days) {
 }
 
 time_t delta_utc_impl(tm& out, Seconds seconds, Days days) {
-    const auto timestamp = start_of_day_offset(seconds, days);
+    const auto timestamp = start_of_day_delta(seconds, days);
 
     time_t tmp { timestamp.count() };
     gmtime_r(&tmp, &out);
