@@ -825,10 +825,45 @@ void update_after(const datetime::Context& ctx) {
 #if TERMINAL_SUPPORT
 namespace terminal {
 
+#if SCHEDULER_SUN_SUPPORT
+namespace internal {
+
+String sunrise_sunset(const sun::EventMatch& match) {
+    if (match.last.minutes > datetime::Minutes::zero()) {
+        return sun::format_match(match);
+    }
+
+    return STRING_VIEW("value not set").toString();
+}
+
+void format_output(::terminal::CommandContext& ctx, const String& prefix, const String& value) {
+    ctx.output.printf_P(PSTR("%s%s%s\n"),
+        prefix.c_str(),
+        value.length()
+            ? PSTR(" at ")
+            : " ",
+        value.c_str());
+}
+
+void dump_sunrise_sunset(::terminal::CommandContext& ctx) {
+    format_output(ctx,
+        STRING_VIEW("Sunrise").toString(),
+        sunrise_sunset(sun::match.rising));
+    format_output(ctx,
+        STRING_VIEW("Sunset").toString(),
+        sunrise_sunset(sun::match.setting));
+}
+
+} // namespace internal
+#endif
+
 PROGMEM_STRING(Dump, "SCHEDULE");
 
-static void dump(::terminal::CommandContext&& ctx) {
+void dump(::terminal::CommandContext&& ctx) {
     if (ctx.argv.size() != 2) {
+#if SCHEDULER_SUN_SUPPORT
+        internal::dump_sunrise_sunset(ctx);
+#endif
         settingsDump(ctx, settings::Settings);
         return;
     }
