@@ -3018,10 +3018,11 @@ static void _relayCommandPulseTimers(::terminal::CommandContext&& ctx) {
         }
 
         ctx.output.printf_P(
-            PSTR("pulse%zu\t{%.*s Duration=%u Status=#%c}\n"),
+            PSTR("pulse%zu\t{%.*s Duration=%u Status=%s}\n"),
+            timer.id(),
             type.length(), type.data(),
-            timer.id(), timer.duration().count(),
-            timer.status() ? 't' : 'f');
+            timer.duration().count(),
+            timer.status() ? PSTR("ON") : PSTR("OFF"));
     }
 
     terminalOK(ctx);
@@ -3167,7 +3168,7 @@ bool _relayProcess(bool mode) {
             _relayScheduleSave(id);
             changed = true;
 
-            DEBUG_MSG_P(PSTR("[RELAY] #%u set to %s\n"), id, target ? "ON" : "OFF");
+            DEBUG_MSG_P(PSTR("[RELAY] #%u set to %s\n"), id, target ? PSTR("ON") : PSTR("OFF"));
         }
     }
 
