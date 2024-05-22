@@ -362,7 +362,7 @@ struct Context {
 
     explicit Context(const datetime::Context& ctx) :
         base(ctx),
-        delta(ctx)
+        current(ctx)
     {
         init();
     }
@@ -376,7 +376,7 @@ struct Context {
 
     const datetime::Context& base;
 
-    datetime::Context delta{};
+    datetime::Context current{};
     datetime::Days days{};
 
     std::vector<Pending> pending{};
@@ -394,8 +394,8 @@ bool Context::next_delta(const datetime::Days& days) {
     }
 
     this->days += days;
-    this->delta = datetime::delta(delta, days);
-    if (this->delta.timestamp < 0) {
+    this->current = datetime::delta(this->current, days);
+    if (this->current.timestamp < 0) {
         return false;
     }
 
@@ -508,7 +508,7 @@ bool handle_delta(Context& ctx, const Pending& pending) {
         return false;
     }
 
-    const auto& time_point = select_time(ctx.delta, pending.schedule);
+    const auto& time_point = select_time(ctx.current, pending.schedule);
 
     if (match(pending.schedule.date, time_point) && match(pending.schedule.weekdays, time_point)) {
         datetime::Minutes offset{ ctx.days - datetime::Days{ -1 }};

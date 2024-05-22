@@ -1261,11 +1261,11 @@ namespace restore {
 [[gnu::used]]
 void Context::init() {
 #if SCHEDULER_SUN_SUPPORT
-    const auto seconds = datetime::Seconds{ this->delta.timestamp };
+    const auto seconds = datetime::Seconds{ this->current.timestamp };
     const auto minutes =
         std::chrono::duration_cast<datetime::Minutes>(seconds);
 
-    sun::update(minutes, this->delta.utc);
+    sun::update(minutes, this->current.utc);
 #endif
 }
 
