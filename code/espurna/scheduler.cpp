@@ -14,12 +14,13 @@ Copyright (C) 2019-2024 by Maxim Prokhorov <prokhorov dot max at outlook dot com
 #if SCHEDULER_SUPPORT
 
 #include "api.h"
+#include "curtain_kingart.h"
 #include "datetime.h"
 #include "mqtt.h"
 #include "ntp.h"
 #include "ntp_timelib.h"
-#include "curtain_kingart.h"
 #include "scheduler.h"
+#include "types.h"
 #include "ws.h"
 
 #if TERMINAL_SUPPORT == 0
@@ -33,8 +34,6 @@ Copyright (C) 2019-2024 by Maxim Prokhorov <prokhorov dot max at outlook dot com
 
 #include "libs/EphemeralPrint.h"
 #include "libs/PrintString.h"
-
-#include <bitset>
 
 // -----------------------------------------------------------------------------
 
@@ -1297,7 +1296,7 @@ void run_delta(Context& ctx) {
     }
 
     const auto days = settings::restoreDays();
-    for (int day = 0; (day < days) && !ctx.pending.empty(); ++day) { 
+    for (int day = 0; (day < days) && !ctx.pending.empty(); ++day) {
         if (!ctx.next()) {
             break;
         }

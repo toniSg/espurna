@@ -12,7 +12,6 @@ Copyright (C) 2019-2024 by Maxim Prokhorov <prokhorov dot max at outlook dot com
 #pragma once
 
 #include "datetime.h"
-#include "types.h"
 
 #include <bitset>
 
