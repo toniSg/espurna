@@ -142,5 +142,5 @@ jobs:
           bodyFile: "release_template.md"
           artifacts: "Debug.zip,build/*.bin"
           token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: true
+          prerelease: false
           draft: true
