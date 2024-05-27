@@ -321,55 +321,7 @@ struct Parsed {
 };
 
 Schedule schedule(size_t index) {
-    Schedule out;
-
-    bool parsed_date { false };
-    bool parsed_weekdays { false };
-    bool parsed_time { false };
-
-    const auto time = settings::time(index);
-    auto split = SplitStringView(time);
-
-    while (split.next()) {
-        auto elem = split.current();
-
-        // most expected order, starting with date
-        if (!parsed_date && ((parsed_date = parse_date(out.date, elem)))) {
-            continue;
-        }
-
-        // then weekdays
-        if (!parsed_weekdays && ((parsed_weekdays = parse_weekdays(out.weekdays, elem)))) {
-            continue;
-        }
-
-        // then time
-        if (!parsed_time && ((parsed_time = parse_time(out.time, elem)))) {
-            continue;
-        }
-
-        // and keyword is always at the end. forcibly stop the parsing, regardless of the state
-        if (parse_time_keyword(out.time, elem)) {
-            if (want_utc(out.time)) {
-                break;
-            }
-
-#if SCHEDULER_SUN_SUPPORT
-            // do not want both time and sun{rise,set}
-            if (want_sunrise_sunset(out.time)) {
-                parsed_time = !parsed_time;
-            }
-#endif
-
-            break;
-        }
-    }
-
-    out.ok = parsed_date
-        || parsed_weekdays
-        || parsed_time;
-
-    return out;
+    return parse_schedule(settings::time(index));
 }
 
 size_t count() {
@@ -1339,6 +1291,10 @@ void run_today(Context& ctx) {
             context_pending(ctx, index, schedule);
             continue;
         }
+#else
+        if (want_sunrise_sunset(schedule.time)) {
+            continue;
+        }
 #endif
 
         handle_today(ctx, index, schedule);
@@ -1392,6 +1348,10 @@ void check(const datetime::Context& ctx) {
 
 #if SCHEDULER_SUN_SUPPORT
         if (!sun::update_schedule(schedule)) {
+            continue;
+        }
+#else
+        if (want_sunrise_sunset(schedule.time)) {
             continue;
         }
 #endif

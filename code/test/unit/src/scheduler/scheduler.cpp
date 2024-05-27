@@ -535,6 +535,225 @@ void test_restore_delta_past() {
     }
 }
 
+void test_schedule_invalid_parsing() {
+    TEST_ASSERT_FALSE(parse_schedule("UTC 12:00").ok);
+    TEST_ASSERT_FALSE(parse_schedule("FOO 12:00").ok);
+    TEST_ASSERT_FALSE(parse_schedule("FOO 12:00").ok);
+    TEST_ASSERT_FALSE(parse_schedule("13:00 14:00 12:00").ok);
+    TEST_ASSERT_FALSE(parse_schedule("Monday Tuesday 14:00 12:00").ok);
+    TEST_ASSERT_FALSE(parse_schedule("").ok);
+    TEST_ASSERT_FALSE(parse_schedule("SUNRISE UTC").ok);
+    TEST_ASSERT_FALSE(parse_schedule("06:05 SUNRISE").ok);
+    TEST_ASSERT_FALSE(parse_schedule("SUNSET 13:55").ok);
+    TEST_ASSERT_FALSE(parse_schedule("2024-05-23 2024-05-24 2024-05-25").ok);
+    TEST_ASSERT_FALSE(parse_schedule("KEYWORD UTC").ok);
+    TEST_ASSERT_FALSE(parse_schedule("UTC KEYWORD").ok);
+}
+
+#define TEST_SCHEDULE_MATCH_DATE(TIME_POINT, SCHEDULE)\
+    TEST_ASSERT(scheduler::match((SCHEDULE).time, (TIME_POINT)))
+
+#define TEST_SCHEDULE_MATCH_WEEKDAYS(TIME_POINT, SCHEDULE)\
+    TEST_ASSERT(scheduler::match((SCHEDULE).weekdays, (TIME_POINT)))
+
+#define TEST_SCHEDULE_MATCH_TIME(TIME_POINT, SCHEDULE)\
+    TEST_ASSERT(scheduler::match((SCHEDULE).time, (TIME_POINT)))
+
+#define TEST_SCHEDULE_MATCH(TIME_POINT, ELEMS) ([&]() {\
+    const auto schedule = parse_schedule(ELEMS);\
+    TEST_ASSERT(schedule.ok);\
+    TEST_SCHEDULE_MATCH_DATE(TIME_POINT, schedule);\
+    TEST_SCHEDULE_MATCH_WEEKDAYS(TIME_POINT, schedule);\
+    TEST_SCHEDULE_MATCH_TIME(TIME_POINT, schedule);})()
+
+void test_schedule_parsing_keyword() {
+    TEST_ASSERT(want_utc(parse_schedule("UTC").time));
+    TEST_ASSERT(want_sunrise(parse_schedule("SUNRISE").time));
+    TEST_ASSERT(want_sunset(parse_schedule("SUNSET").time));
+}
+
+void test_schedule_parsing_time() {
+    MAKE_TIMEPOINT(time_point);
+
+    time_point.tm_hour = 12;
+    time_point.tm_min = 0;
+    TEST_SCHEDULE_MATCH(time_point, "*:00");
+    TEST_SCHEDULE_MATCH(time_point, "12:*");
+    TEST_SCHEDULE_MATCH(time_point, "12:00");
+
+    time_point.tm_hour = 13;
+    time_point.tm_min = 55;
+    TEST_SCHEDULE_MATCH(time_point, "13:*");
+
+    time_point.tm_hour = 14;
+    time_point.tm_min = 44;
+    TEST_SCHEDULE_MATCH(time_point, "14:*");
+
+    time_point.tm_hour = 15;
+    time_point.tm_min = 33;
+    TEST_SCHEDULE_MATCH(time_point, "15:*");
+
+    time_point.tm_hour = 22;
+    time_point.tm_min = 15;
+    TEST_SCHEDULE_MATCH(time_point, "*:*");
+
+    time_point.tm_hour = 0;
+    time_point.tm_min = 0;
+    TEST_SCHEDULE_MATCH(time_point, "2024-01-01");
+    TEST_SCHEDULE_MATCH(time_point, "01-01");
+    TEST_SCHEDULE_MATCH(time_point, "Monday");
+    TEST_SCHEDULE_MATCH(time_point, "00:00");
+    TEST_SCHEDULE_MATCH(time_point, "UTC");
+}
+
+void test_schedule_parsing_time_range() {
+    MAKE_TIMEPOINT(time_point);
+
+    time_point.tm_hour = 13;
+    time_point.tm_min = 0;
+    TEST_SCHEDULE_MATCH(time_point, "13,15..17:00");
+
+    time_point.tm_hour = 15;
+    TEST_SCHEDULE_MATCH(time_point, "13,15..17:00");
+
+    time_point.tm_hour = 16;
+    TEST_SCHEDULE_MATCH(time_point, "13,15..17:00");
+
+    time_point.tm_hour = 17;
+    TEST_SCHEDULE_MATCH(time_point, "13,15..17:00");
+
+    time_point.tm_hour = 12;
+    time_point.tm_min = 5;
+    TEST_SCHEDULE_MATCH(time_point, "00..12:5,10,15,20");
+
+    time_point.tm_hour = 11;
+    time_point.tm_min = 10;
+    TEST_SCHEDULE_MATCH(time_point, "00..12:5,10,15,20");
+
+    time_point.tm_hour = 10;
+    time_point.tm_min = 15;
+    TEST_SCHEDULE_MATCH(time_point, "00..12:5,10,15,20");
+
+    time_point.tm_hour = 9;
+    time_point.tm_min = 20;
+    TEST_SCHEDULE_MATCH(time_point, "00..12:5,10,15,20");
+
+    time_point.tm_hour = 18;
+    time_point.tm_min = 50;
+    TEST_SCHEDULE_MATCH(time_point, "12..23:45..55");
+
+    time_point.tm_hour = 5;
+    time_point.tm_min = 44;
+    TEST_SCHEDULE_MATCH(time_point, "1/1:*");
+
+    time_point.tm_hour = 11;
+    time_point.tm_min = 33;
+    TEST_SCHEDULE_MATCH(time_point, "11,12,13:33");
+
+    time_point.tm_hour = 12;
+    TEST_SCHEDULE_MATCH(time_point, "11,12,13:33");
+
+    time_point.tm_hour = 13;
+    TEST_SCHEDULE_MATCH(time_point, "11,12,13:33");
+}
+
+void test_schedule_parsing_date() {
+    MAKE_TIMEPOINT(time_point);
+
+    time_point.tm_hour = 6;
+    time_point.tm_min = 0;
+    time_point.tm_mon = 0;
+    time_point.tm_mday = 1;
+    TEST_SCHEDULE_MATCH(time_point, "01-01 06:00");
+
+    time_point.tm_hour = 2;
+    time_point.tm_min = 0;
+    time_point.tm_mon = 4;
+    time_point.tm_mday = 10;
+    TEST_SCHEDULE_MATCH(time_point, "05-W2 02:00");
+
+    time_point.tm_hour = 18;
+    time_point.tm_min = 55;
+    time_point.tm_mon = 11;
+
+    time_point.tm_mday = 30;
+    TEST_SCHEDULE_MATCH(time_point, "12-L1,2 18:55");
+
+    time_point.tm_mday = 31;
+    TEST_SCHEDULE_MATCH(time_point, "12-L1,2 18:55");
+}
+
+void test_schedule_parsing_date_range() {
+    MAKE_TIMEPOINT(time_point);
+
+    time_point.tm_hour = 5;
+    time_point.tm_min = 0;
+
+    time_point.tm_mon = 1;
+    time_point.tm_mday = 1;
+    TEST_SCHEDULE_MATCH(time_point, "*-1/5 5:00");
+
+    time_point.tm_mon = 2;
+    time_point.tm_mday = 6;
+    TEST_SCHEDULE_MATCH(time_point, "*-1/5 5:00");
+
+    time_point.tm_mon = 3;
+    time_point.tm_mday = 11;
+    TEST_SCHEDULE_MATCH(time_point, "*-1/5 5:00");
+
+    time_point.tm_mon = 4;
+    time_point.tm_mday = 16;
+    TEST_SCHEDULE_MATCH(time_point, "*-1/5 5:00");
+
+    time_point.tm_mon = 5;
+    time_point.tm_mday = 21;
+    TEST_SCHEDULE_MATCH(time_point, "*-1/5 5:00");
+
+    time_point.tm_mon = 6;
+    time_point.tm_mday = 26;
+    TEST_SCHEDULE_MATCH(time_point, "*-1/5 5:00");
+
+    time_point.tm_mon = 7;
+    time_point.tm_mday = 31;
+    TEST_SCHEDULE_MATCH(time_point, "*-1/5 5:00");
+}
+
+void test_schedule_parsing_weekdays() {
+    MAKE_TIMEPOINT(time_point);
+
+    time_point.tm_hour = 10;
+    time_point.tm_min = 0;
+
+    time_point.tm_wday = datetime::Saturday.c_value();
+    TEST_SCHEDULE_MATCH(time_point, "Sat,Sun 10:00");
+
+    time_point.tm_wday = datetime::Sunday.c_value();
+    TEST_SCHEDULE_MATCH(time_point, "Sat,Sun 10:00");
+}
+
+void test_schedule_parsing_weekdays_range() {
+    MAKE_TIMEPOINT(time_point);
+
+    time_point.tm_min = 30;
+    time_point.tm_wday = 1;
+
+    time_point.tm_hour = 10;
+    time_point.tm_wday = 1;
+    TEST_SCHEDULE_MATCH(time_point, "Mon,Thu..Sat 10,15,20:30");
+
+    time_point.tm_hour = 15;
+    time_point.tm_wday = 4;
+    TEST_SCHEDULE_MATCH(time_point, "Mon,Thu..Sat 10,15,20:30");
+
+    time_point.tm_hour = 20;
+    time_point.tm_wday = 5;
+    TEST_SCHEDULE_MATCH(time_point, "Mon,Thu..Sat 10,15,20:30");
+
+    time_point.tm_hour = 20;
+    time_point.tm_wday = 6;
+    TEST_SCHEDULE_MATCH(time_point, "Mon,Thu..Sat 10,15,20:30");
+}
+
 } // namespace test
 
 } // namespace
@@ -565,5 +784,13 @@ int main(int, char**) {
     RUN_TEST(test_restore_today);
     RUN_TEST(test_restore_delta_future);
     RUN_TEST(test_restore_delta_past);
+    RUN_TEST(test_schedule_invalid_parsing);
+    RUN_TEST(test_schedule_parsing_date);
+    RUN_TEST(test_schedule_parsing_date_range);
+    RUN_TEST(test_schedule_parsing_keyword);
+    RUN_TEST(test_schedule_parsing_time);
+    RUN_TEST(test_schedule_parsing_time_range);
+    RUN_TEST(test_schedule_parsing_weekdays);
+    RUN_TEST(test_schedule_parsing_weekdays_range);
     return UNITY_END();
 }
