@@ -3,13 +3,11 @@
 ESPurna ("spark" in Catalan) is a custom firmware for ESP8285/ESP8266 based smart switches, lights and sensors.
 It uses the Arduino Core for ESP8266 framework and a number of 3rd party libraries.
 
-[![version](https://img.shields.io/badge/version-1.15.0--dev-brightgreen.svg)](CHANGELOG.md)
+[![latest snapshot build](https://img.shields.io/github/v/release/xoseperez/espurna?include_prereleases&label=latest%20snapshot%20build)](https://github.com/xoseperez/espurna/releases?q=prerelease%3Atrue&expanded=true)
 [![branch](https://img.shields.io/badge/branch-dev-orange.svg)](https://github.com/xoseperez/espurna/tree/dev/)
 [![license](https://img.shields.io/github/license/xoseperez/espurna.svg)](LICENSE)
 [![ci build](https://github.com/xoseperez/espurna/actions/workflows/push.yml/badge.svg?branch=dev)](https://github.com/xoseperez/espurna/actions/workflows/push.yml)
 <br />
-[![latest release](https://img.shields.io/github/v/release/xoseperez/espurna?label=latest%20release)](https://github.com/xoseperez/espurna/releases/latest)
-[![latest snapshot build](https://img.shields.io/github/v/release/xoseperez/espurna?include_prereleases&label=latest%20snapshot%20build)](https://github.com/xoseperez/espurna/releases?q=prerelease%3Atrue&expanded=true)
 [![downloads](https://img.shields.io/github/downloads/xoseperez/espurna/total.svg)](https://github.com/xoseperez/espurna/releases)
 <br />
 [![donate](https://img.shields.io/badge/donate-PayPal-blue.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=xose%2eperez%40gmail%2ecom&lc=US&no_note=0&currency_code=EUR&bn=PP%2dDonationsBF%3abtn_donate_LG%2egif%3aNonHostedGuest)
