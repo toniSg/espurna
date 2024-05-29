@@ -31,8 +31,6 @@ const path = require('path');
 const gulp = require('gulp');
 const through = require('through2');
 
-const csslint = require('gulp-csslint');
-
 const htmlmin = require('html-minifier');
 
 const gzip = require('gulp-gzip');
@@ -274,12 +272,6 @@ gulp.task('certs', function() {
     gulp.src(dataFolder + 'server.*').
         pipe(toHeader('', false)).
         pipe(gulp.dest(staticFolder));
-});
-
-gulp.task('csslint', function() {
-    gulp.src(htmlFolder + '*.css').
-        pipe(csslint({ids: false})).
-        pipe(csslint.formatter());
 });
 
 gulp.task('webui_small', function() {
