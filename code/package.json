@@ -8,8 +8,8 @@
   ],
   "license": "GPL-3.0",
   "devDependencies": {
-    "eslint": "^8.57.0",
-    "inline-source": "^8.0.3",
+    "@eslint/js": "^9.3.0",
+    "eslint": "^9.3.0",
     "gulp": "^4.0.2",
     "gulp-gzip": "^1.4.0",
     "gulp-htmllint": "0.0.19",
@@ -17,6 +17,7 @@
     "gulp-rename": "^2.0.0",
     "gulp-replace": "^1.0.0",
     "html-minifier": "^4.0.0",
-    "html-validate": "^8.18.1"
+    "html-validate": "^8.19.1",
+    "inline-source": "^8.0.3"
   }
 }
