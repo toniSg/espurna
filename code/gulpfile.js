@@ -36,7 +36,7 @@ const csslint = require('gulp-csslint');
 const htmlmin = require('html-minifier');
 
 const gzip = require('gulp-gzip');
-const inline = require('gulp-inline-source-html');
+const inline = require('inline-source');
 const rename = require('gulp-rename');
 const replace = require('gulp-replace');
 
@@ -190,6 +190,27 @@ var inlineHandler = function(modules) {
     };
 }
 
+function inlineSource(rootPath, modules) {
+    return through.obj(async function (source, _, callback) {
+        if (source.isNull()) {
+            callback(null, source);
+            return;
+        }
+
+        const result = await inline.inlineSource(
+            source.contents.toString(),
+            {
+                "compress": true,
+                "handlers": [inlineHandler(modules)],
+                "rootpath": rootPath,
+            });
+
+        source.contents = Buffer.from(result);
+
+        callback(null, source);
+    });
+}
+
 var buildWebUI = function(module) {
 
     // Declare some modules as optional to remove with
@@ -229,7 +250,7 @@ var buildWebUI = function(module) {
 
     return gulp.src(htmlFolder + '*.html').
         pipe(htmlRemover(modules)).
-        pipe(inline({handlers: [inlineHandler(modules)]})).
+        pipe(inlineSource(htmlFolder, modules)).
         pipe(toMinifiedHtml({
             collapseWhitespace: true,
             removeComments: true,
