@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `SENSOR_PUBLISH_ADDRESS` build w/ Core 2.7.4 [#2594](https://github.com/xoseperez/espurna/issues/2594)
 - SoftwareSerial swapped TX & RX in configuration [#2592](https://github.com/xoseperez/espurna/issues/2592)
 - InfluxDB using internal ID instead of public one [#2585](https://github.com/xoseperez/espurna/issues/2585)
+- Restore previously removed real telnet command packet workarounds, allow PuTTY to authenticate [#2563](https://github.com/xoseperez/espurna/issues/2563), [#2606](https://github.com/xoseperez/espurna/issues/2606)
 - Sensor filter fixes and consistent number of output values [#2543](https://github.com/xoseperez/espurna/issues/2543)
 
 ### Changed
