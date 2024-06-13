@@ -3050,7 +3050,7 @@ bool wifiConnected() {
     return espurna::wifi::sta::connected();
 }
 
-espurna::wifi::StaNetwork wifiStaNetwork() {
+espurna::wifi::StaNetwork wifiStaInfo() {
     if (espurna::wifi::opmode() & espurna::wifi::OpmodeSta) {
         return espurna::wifi::sta::current();
     }
