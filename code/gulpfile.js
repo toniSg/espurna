@@ -60,6 +60,7 @@ const DEFAULT_MODULES = {
     'led': true,
     'light': false,
     'lightfox': false,
+    'local': false,
     'mqtt': true,
     'nofuss': true,
     'ntp': true,
