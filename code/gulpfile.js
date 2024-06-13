@@ -26,12 +26,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Dependencies
 // -----------------------------------------------------------------------------
 
-const path = require('path');
-
 const gulp = require('gulp');
+
 const through = require('through2');
 
-const htmlmin = require('html-minifier');
+const fs = require('node:fs');
+const http = require('node:http');
+const path = require('node:path');
+
+const jsdom = require('jsdom');
+const esbuild = require('esbuild');
+const htmlmin = require('html-minifier-terser');
 
 const gzip = require('gulp-gzip');
 const inline = require('inline-source');
@@ -42,153 +47,305 @@ const replace = require('gulp-replace');
 // Configuration
 // -----------------------------------------------------------------------------
 
-const htmlFolder = 'html/';
-const dataFolder = 'espurna/data/';
-const staticFolder = 'espurna/static/';
+// declare some modules as optional, only to be included for specific builds
+const DEFAULT_MODULES = {
+    'api': true,
+    'cmd': true,
+    'curtain': false,
+    'dbg': true,
+    'dcz': true,
+    'garland': false,
+    'ha': true,
+    'idb': true,
+    'led': true,
+    'light': false,
+    'lightfox': false,
+    'mqtt': true,
+    'nofuss': true,
+    'ntp': true,
+    'ota': true,
+    'relay': true,
+    'rfb': false,
+    'rfm69': false,
+    'rpn': true,
+    'sch': true,
+    'sns': false,
+    'thermostat': false,
+    'tspk': true,
+};
+
+// includes everything (with some exceptions... TODO)
+const MODULES_ALL = Object.fromEntries(
+    Object.entries(DEFAULT_MODULES).map(
+        ([key, _]) => {
+            return [key, true];
+        }));
+
+// webui_serve target
+const MODULES_LOCAL = Object.assign(
+    MODULES_ALL,
+    {
+        'local': true,
+    });
+
+// generic output, usually this includes a single module
+const NAMED_BUILD = {
+    'curtain': 'curtain',
+    'garland': 'garland',
+    'light': 'light',
+    'lightfox': 'lightfox',
+    'rfbridge': 'rfb',
+    'rfm69': 'rfm69',
+    'sensor': 'sns',
+    'thermostat': 'thermostat',
+};
+
+// input soruces. right now this is an index.html as entrypoint
+const SRC_DIR = path.join('html', 'src');
+
+// resulting .html.gz output after inlining and compressing everything
+const DATA_DIR = path.join('espurna', 'data');
+
+// .h compiled from the .html.gz, can be used as a u8 blob inside of the firmware
+const STATIC_DIR = path.join('espurna', 'static');
 
 // -----------------------------------------------------------------------------
 // Methods
 // -----------------------------------------------------------------------------
 
-var toMinifiedHtml = function(options) {
-    return through.obj(function (source, encoding, callback) {
-        if (source.isNull()) {
-            callback(null, source);
-            return;
+function toMinifiedHtml(options) {
+    return through.obj(async function (source, _, callback) {
+        if (!source.isNull()) {
+            const contents = source.contents.toString();
+            source.contents = Buffer.from(
+                await htmlmin.minify(contents, options));
         }
 
-        var contents = source.contents.toString();
-        source.contents = Buffer.from(htmlmin.minify(contents, options));
         callback(null, source);
     });
 }
 
-var toHeader = function(name, debug) {
+function safename(name) {
+    return path.basename(name).replaceAll('.', '_');
+}
 
-    return through.obj(function (source, encoding, callback) {
-
-        var parts = source.path.split(path.sep);
-        var filename = parts[parts.length - 1];
-        var safename = name || filename.split('.').join('_');
-
-        // Generate output
-        var output = '';
-        output += 'alignas(4) static constexpr uint8_t ' + safename + '[] PROGMEM = {';
-        for (var i=0; i<source.contents.length; i++) {
+function toHeader(name) {
+    return through.obj(function (source, _, callback) {
+        // generates c++-friendly header output from raw binary data
+        let output = `alignas(4) static constexpr uint8_t ${safename(name)}[] PROGMEM = {`;
+        for (let i = 0; i < source.contents.length; i++) {
             if (i > 0) { output += ','; }
             if (0 === (i % 20)) { output += '\n'; }
             output += '0x' + ('00' + source.contents[i].toString(16)).slice(-2);
         }
-        output += '\n};';
+        output += '\n};\n';
 
-        // clone the contents
-        var destination = source.clone();
-        destination.path = source.path + '.h';
-        destination.contents = Buffer.from(output);
+        // replace source stream with a different one, also replacing contents
+        let dest = source.clone();
+        dest.path = `${source.path}.h`;
+        dest.contents = Buffer.from(output);
 
-        if (debug) {
-            console.info('Image ' + filename + ' \tsize: ' + source.contents.length + ' bytes');
-        }
-
-        callback(null, destination);
-
+        callback(null, dest);
     });
-
-};
-
-// TODO: this is a roughly equivalent port of the gulp-remove-code,
-// which also uses regexp rules to filter in-between specially-formatted comment blocks
-
-var jsRegexp = function(module) {
-    return '//\\s*removeIf\\(!' + module + '\\)'
-            + '\\s*(\n|\r|.)*?'
-            + '//\\s*endRemoveIf\\(!' + module + '\\)';
 }
 
-var cssRegexp = function(module) {
-    return '/\\*\\s*removeIf\\(!' + module + '\\)\\s*\\*/'
-            + '\\s*(\n|\r|.)*?'
-            + '/\\*\\s*endRemoveIf\\(!' + module + '\\)\\s*\\*/';
-}
-
-var htmlRegexp = function(module) {
-    return '<!--\\s*removeIf\\(!' + module + '\\)\\s*-->'
-            + '\\s*(\n|\r|.)*?'
-            + '<!--\\s*endRemoveIf\\(!' + module + '\\)\\s*-->';
-}
-
-var generateRegexps = function(modules, func) {
-    var regexps = new Set();
-    for (const [module, enabled] of Object.entries(modules)) {
-        if (enabled) {
-            continue;
-        }
-
-        const expression = func(module);
-        const re = new RegExp(expression, 'gm');
-
-        regexps.add(re);
-    }
-
-    return regexps;
-}
-
-// TODO: use html parser here?
-// TODO: separate js files to include js, html & css and avoid 2 step regexp?
-
-var htmlRemover = function(modules) {
-    const regexps = generateRegexps(modules, htmlRegexp);
-
+function logSource() {
     return through.obj(function (source, _, callback) {
-        if (source.isNull()) {
-            callback(null, source);
-            return;
-        }
-
-        var contents = source.contents.toString();
-        for (var regexp of regexps) {
-            contents = contents.replace(regexp, '');
-        }
-        source.contents = Buffer.from(contents);
+        console.info(`${path.basename(source.path)}\tsize: ${source.contents.length} bytes`);
         callback(null, source);
     });
 }
 
-var inlineHandler = function(modules) {
-    return function(source) {
-        if (((source.sourcepath === 'custom.css') || (source.sourcepath === 'custom.js'))) {
-            const filter = (source.type === 'css') ? cssRegexp : jsRegexp;
-            const regexps = generateRegexps(modules, filter);
+// by default, gulp.dest preserves stat.*time of the source. which is obviosly bogus here as gulp
+// only knows about src/index.html and not about every include happenning through inline-source
+function adjustFileStat() {
+    return through.obj(function(source, _, callback) {
+        const now = new Date();
+        source.stat.atime = now;
+        source.stat.mtime = now;
+        source.stat.ctime = now;
+        callback(null, source);
+    });
+}
 
-            var content = source.fileContent;
-            for (var regexp of regexps) {
-                content = content.replace(regexp, '');
-            }
+// ref. https://github.com/evanw/esbuild/issues/1895
+// from our side, html/src/*.mjs (with the exception of index.mjs) require 'init()' call to be actually set up and used
+// as the result, no code from the module should be bundled into the output when module was not initialized
+// however, since light module depends on iro.js and does not have `sideEffects: false` in package.json, it would still get bundled because of top-level import
+// (...and since module modifying something in global scope is not unheard of...)
+function forceNoSideEffects() {
+    return {
+        name: 'no-side-effects',
+        setup(build) {
+            build.onResolve({filter: /@jaames\/iro/, namespace: 'file'},
+                async ({path, ...options}) => {
+                    const result = await build.resolve(path, {...options, namespace: 'noRecurse'});
+                    return {...result, sideEffects: false};
+                });
+        },
+    };
+}
 
-            source.fileContent = content;
-            return;
-        }
+// ref. html/src/index.mjs
+// TODO exportable values, e.g. in build.mjs? right now, false-positive of undeclared values, plus see 'forceNoSideEffects()'
+function makeDefines(modules) {
+    return Object.fromEntries(
+        Object.entries(modules).map(
+            ([key, value]) => {
+                return [`MODULE_${key.toUpperCase()}`, value.toString()];
+            }));
+}
 
-        if (source.sourcepath === "favicon.ico") {
-            source.format = "x-icon";
-            return;
-        }
+async function inlineJavascriptBundle(sourcefile, contents, resolveDir, modules, minify) {
+    return await esbuild.build({
+        stdin: {
+            contents,
+            loader: 'js',
+            resolveDir,
+            sourcefile,
+        },
+        bundle: true,
+        plugins: [
+            forceNoSideEffects(),
+        ],
+        define: makeDefines(modules),
+        minify,
+        platform: 'browser',
+        write: false,
+    });
+}
 
+function inlineHandler(srcdir, modules, compress) {
+    return async function(source) {
+        // TODO split handlers
         if (source.content) {
             return;
         }
 
-        // Just ignore the vendored libs, repackaging makes things worse for the size
-        const path = source.sourcepath;
-        if (path.endsWith('.min.js')) {
+        // specific elements can be excluded at this point
+        // (although, could be handled by jsdom afterwards; top elem does not usually have classList w/ module)
+        for (let module of source.props?.module?.split(',') ?? []) {
+            if (!modules[module]) {
+                source.compress = false;
+                source.content = Buffer.from('');
+                source.replace = '<div></div>';
+                return;
+            }
+        }
+
+        // main entrypoint of the app, usually a script bundle
+        if (source.format === 'mjs') {
+            const result = await inlineJavascriptBundle(
+                source.sourcepath,
+                source.fileContent,
+                srcdir, modules, compress);
+            if (!result.outputFiles.length) {
+                callback('cannot build js bundle', null);
+                return;
+            }
+
+            source.content = Buffer.from(result.outputFiles[0].contents);
             source.compress = false;
-        } else if (path.endsWith('.min.css')) {
-            source.compress = false;
+            return;
+        }
+
+        // <object type=text/html>. not handled by inline-source directly, only image blobs are expected
+        if (source.props.raw) {
+            source.content = source.fileContent;
+            source.replace = source.content.toString();
+            source.format = 'text';
+            return;
+        }
+
+        // TODO import svg icon?
+        if (source.sourcepath === 'favicon.ico') {
+            source.format = 'x-icon';
+            return;
         }
     };
 }
 
-function inlineSource(rootPath, modules) {
+function modifyHtml(handlers) {
+    return through.obj(function (source, _, callback) {
+        const dom = new jsdom.JSDOM(source.contents, {includeNodeLocations: true});
+
+        let changed = false;
+
+        for (let handler of handlers) {
+            if (handler(dom)) {
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            source.contents = Buffer.from(dom.serialize());
+        }
+
+        callback(null, source);
+    });
+}
+
+// generally a good idea to mitigate "tab-napping" attacks
+// per https://www.chromestatus.com/feature/6140064063029248
+function externalBlank() {
+    /**
+     * @param {jsdom.JSDOM} dom
+     * @return {boolean}
+     */
+    return function(dom) {
+        let changed = false;
+
+        for (let elem of dom.window.document.getElementsByTagName('a')) {
+            if (elem.href.startsWith('http')) {
+                elem.setAttribute('target', '_blank');
+                elem.setAttribute('rel', 'noopener');
+                elem.setAttribute('tabindex', '-1');
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+}
+
+// with an explicit list of modules, strip anything not used by the bundle
+function stripModules(modules) {
+    /**
+     * @param {jsdom.JSDOM} dom
+     * @return {boolean}
+     */
+    return function(dom) {
+        let changed = false;
+
+        for (const [module, value] of Object.entries(modules)) {
+            if (value) {
+                continue;
+            }
+
+            const className = `module-${module}`;
+            for (let elem of dom.window.document.getElementsByClassName(className)) {
+                elem.classList.remove(className);
+
+                let remove = true;
+                for (let name of elem.classList) {
+                    if (name.startsWith('module-')) {
+                        remove = false;
+                        break;
+                    }
+                }
+
+                if (remove) {
+                    elem.parentElement.removeChild(elem);
+                    changed = true;
+                }
+            }
+        }
+
+        return changed;
+    }
+}
+
+function inlineSource(srcdir, modules, compress) {
     return through.obj(async function (source, _, callback) {
         if (source.isNull()) {
             callback(null, source);
@@ -198,9 +355,9 @@ function inlineSource(rootPath, modules) {
         const result = await inline.inlineSource(
             source.contents.toString(),
             {
-                "compress": true,
-                "handlers": [inlineHandler(modules)],
-                "rootpath": rootPath,
+                'compress': compress,
+                'handlers': [inlineHandler(srcdir, modules, compress)],
+                'rootpath': srcdir,
             });
 
         source.contents = Buffer.from(result);
@@ -209,124 +366,151 @@ function inlineSource(rootPath, modules) {
     });
 }
 
-var buildWebUI = function(module) {
-
-    // Declare some modules as optional to remove with
-    // removeIf(!name) ...code... endRemoveIf(!name) sections
-    // (via gulp-remove-code)
-    var modules = {
-        'light': false,
-        'sensor': false,
-        'rfbridge': false,
-        'rfm69': false,
-        'garland': false,
-        'thermostat': false,
-        'lightfox': false,
-        'curtain': false
-    };
-
-    // Note: only build these when specified as module arg
-    var excludeAll = [
-        'rfm69',
-        'lightfox'
-    ];
-
-    // 'all' to include all *but* excludeAll
-    // '<module>' to include a single module
-    // 'small' is the default state (all disabled)
-    if ('all' === module) {
-        Object.keys(modules).
-            filter(function(key) {
-                return excludeAll.indexOf(key) < 0;
-            }).
-            forEach(function(key) {
-                modules[key] = true;
-            });
-    } else if ('small' !== module) {
-        modules[module] = true;
+// TODO html/src/* is not directly usable, and neither are file:/// modules b/c of modern CORS requirements
+// ref. https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules#other_differences_between_modules_and_standard_scripts
+// make 2 'all' bundles with and without minification or spawn a webserver w/ sourcemaps included?
+function buildHtml(name, modules, compress) {
+    if (modules === undefined) {
+        modules = Object.assign({}, DEFAULT_MODULES);
+        modules[NAMED_BUILD[name]] = true;
     }
 
-    return gulp.src(htmlFolder + '*.html').
-        pipe(htmlRemover(modules)).
-        pipe(inlineSource(htmlFolder, modules)).
-        pipe(toMinifiedHtml({
-            collapseWhitespace: true,
-            removeComments: true,
-            minifyCSS: false,
-            minifyJS: false
-        })).
-        pipe(replace('pure-', 'p-')).
-        pipe(gzip({ gzipOptions: { level: 9 } })).
-        pipe(rename('index.' + module + '.html.gz')).
-        pipe(gulp.dest(dataFolder)).
-        pipe(toHeader('webui_image', true)).
-        pipe(gulp.dest(staticFolder));
+    if (modules === undefined) {
+        throw `'modules' argument / NAMED_BUILD['${name}'] is missing`;
+    }
 
-};
+    const out = gulp.src(path.join(SRC_DIR, 'index.html'))
+        .pipe(inlineSource(SRC_DIR, modules, compress))
+        .pipe(modifyHtml([
+            stripModules(modules),
+            externalBlank(),
+        ]));
+
+    if (compress) {
+        return out.pipe(
+            toMinifiedHtml({
+                collapseWhitespace: true,
+                removeComments: true,
+                minifyCSS: true,
+                minifyJS: false
+            })).pipe(
+                replace('pure-', 'p-'));
+    }
+
+    return out;
+}
+
+function buildOutputs(name, stream) {
+    return stream
+        .pipe(gzip({gzipOptions: {level: 9 }}))
+        .pipe(adjustFileStat())
+        .pipe(rename(`index.${name}.html.gz`))
+        .pipe(logSource())
+        .pipe(gulp.dest(DATA_DIR))
+        .pipe(toHeader('webui_image'))
+        .pipe(gulp.dest(STATIC_DIR));
+}
+
+function buildWebUI(name, modules, compress = true) {
+    return buildOutputs(name, buildHtml(name, modules, compress));
+}
+
+function serveWebUI(name, modules) {
+    const server = http.createServer();
+
+    server.on('request', function(request, response) {
+        buildHtml(name, modules, false).pipe(
+            through.obj(function(source, _, callback) {
+                const url = new URL(`http://localhost${request.url}`);
+
+                // serve bundled html as-is, do not minify
+                switch (url.pathname) {
+                case '/':
+                case '/index.htm':
+                case '/index.html':
+                    response.writeHead(200, {
+                        'Content-Type': 'text/html',
+                        'Content-Length': source.contents.length,
+                    });
+
+                    response.write(source.contents);
+                    response.end();
+
+                    callback(null, source);
+                    return;
+                }
+
+                // when module files need browser repl. but, note the bundling scope
+                // and unavailable external modules (i.e. node_modules/*)
+                if (url.pathname.endsWith('.mjs')) {
+                    const name = url.pathname.split('/').at(-1);
+
+                    response.writeHead(200, {
+                        'Content-Type': 'text/javascript',
+                    });
+
+                    fs.createReadStream(path.join(SRC_DIR, name))
+                        .pipe(response);
+                    callback(null, source);
+                    return;
+                }
+
+                response.writeHead(500, {'content-type': 'text/plain'});
+                response.end('500');
+
+                callback(null, source);
+            }));
+    });
+
+    server.listen(8080);
+}
 
 // -----------------------------------------------------------------------------
 // Tasks
 // -----------------------------------------------------------------------------
 
-gulp.task('certs', function() {
-    gulp.src(dataFolder + 'server.*').
-        pipe(toHeader('', false)).
-        pipe(gulp.dest(staticFolder));
-});
+gulp.task('webui_serve',
+    () => serveWebUI('all', MODULES_LOCAL));
 
-gulp.task('webui_small', function() {
-    return buildWebUI('small');
-});
+gulp.task('webui_all',
+    () => buildWebUI('all', MODULES_ALL));
 
-gulp.task('webui_sensor', function() {
-    return buildWebUI('sensor');
-});
+gulp.task('webui_small',
+    () => buildWebUI('small', DEFAULT_MODULES));
 
-gulp.task('webui_light', function() {
-    return buildWebUI('light');
-});
+gulp.task('webui_curtain',
+    () => buildWebUI('curtain'));
 
-gulp.task('webui_rfbridge', function() {
-    return buildWebUI('rfbridge');
-});
+gulp.task('webui_garland',
+    () => buildWebUI('garland'));
 
-gulp.task('webui_rfm69', function() {
-    return buildWebUI('rfm69');
-});
+gulp.task('webui_light',
+    () => buildWebUI('light'));
 
-gulp.task('webui_lightfox', function() {
-    return buildWebUI('lightfox');
-});
+gulp.task('webui_lightfox',
+    () => buildWebUI('lightfox'));
 
-gulp.task('webui_garland', function() {
-    return buildWebUI('garland');
-});
+gulp.task('webui_rfbridge',
+    () => buildWebUI('rfbridge'));
 
-gulp.task('webui_thermostat', function() {
-    return buildWebUI('thermostat');
-});
+gulp.task('webui_rfm69',
+    () => buildWebUI('rfm69'));
 
-gulp.task('webui_curtain', function() {
-    return buildWebUI('curtain');
-});
+gulp.task('webui_sensor',
+    () => buildWebUI('sensor'));
 
-gulp.task('webui_all', function() {
-    return buildWebUI('all');
-});
+gulp.task('webui_thermostat',
+    () => buildWebUI('thermostat'));
 
-gulp.task('webui',
+gulp.task('default',
     gulp.parallel(
+        'webui_all',
         'webui_small',
-        'webui_sensor',
+        'webui_curtain',
+        'webui_garland',
         'webui_light',
+        'webui_lightfox',
         'webui_rfbridge',
         'webui_rfm69',
-        'webui_lightfox',
-        'webui_garland',
-        'webui_thermostat',
-        'webui_curtain',
-        'webui_all'
-    )
-);
-
-gulp.task('default', gulp.series('webui'));
+        'webui_sensor',
+        'webui_thermostat'));

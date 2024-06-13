@@ -16,9 +16,9 @@ case "$1" in
     popd
     ;;
 ("webui")
-    # TODO: both can only parse one file at a time
-    npm exec --no -- eslint html/custom.js
-    npm exec --no -- html-validate html/index.html
+    npm exec --no -- eslint html/src/*.mjs
+    npm exec --no -- eslint gulpfile.js
+    npm exec --no -- html-validate html/src/*.html
     # checks whether the webui can be built
     ./build.sh -f environments
     # TODO: gzip inserts an OS-dependant byte in the header, ref.

@@ -159,9 +159,34 @@ String _wsFormatTime(time_t timestamp) {
     return String(buffer);
 }
 
-void _wsUpdate(JsonObject& root) {
+void _wsUpdateAp(JsonObject& root) {
+    IPAddress ip{};
+
+    if (wifiConnectable()) {
+        ip = wifiApIp();
+    }
+
+    root[F("apip")] = ip.toString();
+}
+
+void _wsUpdateSta(JsonObject& root) {
+    IPAddress ip{};
+    espurna::wifi::StaNetwork network{};
+
+    if (wifiConnected()) {
+        ip = wifiStaIp();
+        network = wifiStaInfo();
+    }
+
+    root[F("ssid")] = network.ssid;
+    root[F("bssid")] = network.bssid;
+    root[F("channel")] = network.channel;
+    root[F("staip")] = ip.toString();
+}
+
+void _wsUpdateStats(JsonObject& root) {
     root[F("heap")] = systemFreeHeap();
-    root[F("uptime")] = systemUptime().count();
+    root[F("uptime")] = prettyDuration(systemUptime());
     root[F("rssi")] = WiFi.RSSI();
     root[F("loadaverage")] = systemLoadAverage();
 #if ADC_MODE_VALUE == ADC_VCC
@@ -169,19 +194,33 @@ void _wsUpdate(JsonObject& root) {
 #else
     root[F("vcc")] = F("N/A (TOUT) ");
 #endif
-#if NTP_SUPPORT
-    if (ntpSynced()) {
-        // XXX: arduinojson default config will silently downcast
-        //      double to float and (u)int64_t to (u)int32_t.
-        //      convert to string instead, and assume the int is handled correctly
-        auto info = ntpInfo();
+}
 
-        root[F("now")] = _wsFormatTime(info.now);
-        root[F("nowString")] = info.utc;
-        root[F("nowLocalString")] = info.local.length()
-            ? info.local
-            : info.utc;
+#if NTP_SUPPORT
+void _wsUpdateNtp(JsonObject& root) {
+    if (!ntpSynced()) {
+        return;
     }
+
+    // XXX: arduinojson default config will silently downcast
+    //      double to float and (u)int64_t to (u)int32_t.
+    //      convert to string instead, and assume the int is handled correctly
+    const auto info = ntpInfo();
+
+    root[F("now")] = _wsFormatTime(info.now);
+    root[F("nowString")] = info.utc;
+    root[F("nowLocalString")] = info.local.length()
+        ? info.local
+        : info.utc;
+}
+#endif
+
+void _wsUpdate(JsonObject& root) {
+    _wsUpdateAp(root);
+    _wsUpdateSta(root);
+    _wsUpdateStats(root);
+#if NTP_SUPPORT
+    _wsUpdateNtp(root);
 #endif
 }
 
@@ -640,20 +679,14 @@ void _wsOnConnected(JsonObject& root) {
     root[F("device")] =
         String(info.hardware.device);
 
-    root[F("app_name")] =
-        String(info.app.name);
-    root[F("app_version")] =
-        String(info.app.version);
-    root[F("app_build")] = info.app.build_time.c_str();
+    root[F("app_name")] = info.app.name;
+    root[F("app_version")] = info.app.version;
+    root[F("app_build")] = info.app.build_time;
 
     root[F("hostname")] = systemHostname();
     root[F("chipid")] = systemChipId().c_str();
     root[F("desc")] = systemDescription();
 
-    root[F("bssid")] = WiFi.BSSIDstr();
-    root[F("channel")] = WiFi.channel();
-    root[F("network")] = wifiStaSsid();
-    root[F("deviceip")] = wifiStaIp().toString();
     root[F("sketch_size")] = ESP.getSketchSize();
     root[F("free_size")] = ESP.getFreeSketchSpace();
 
