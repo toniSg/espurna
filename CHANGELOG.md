@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - WiFi boot mode [aa2476e4](https://github.com/xoseperez/espurna/commit/aa2476e4a72e2fd0e9d2e7a16857b567305f43d0)
 
 ### Fixed
+- Domoticz JSON truncation [#2605](https://github.com/xoseperez/espurna/issues/2605)
 - Manually reject all-zero and all-set payloads from DallasSensor, since both successfully pass CRC check [e92be04e](https://github.com/xoseperez/espurna/commit/e92be04eea4848098a8a11675a1ece527966adee), [#2543](https://github.com/xoseperez/espurna/issues/2543)
 - Do not add failed sensor readings to the total 'report' counter [2d19d8e1](https://github.com/xoseperez/espurna/commit/2d19d8e1e94209e1d1c5c042cba5ba7c7fa4198a)
 - RFBRIDGE not respecting MQTT repeat value [686728a3](https://github.com/xoseperez/espurna/commit/686728a329d9b5e159fc7b5394517c968edb7a22)
