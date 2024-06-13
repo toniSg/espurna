@@ -179,7 +179,8 @@ void _wsUpdateSta(JsonObject& root) {
     }
 
     root[F("ssid")] = network.ssid;
-    root[F("bssid")] = network.bssid;
+    root[F("bssid")] =
+        ::espurna::settings::internal::serialize(network.bssid);
     root[F("channel")] = network.channel;
     root[F("staip")] = ip.toString();
 }

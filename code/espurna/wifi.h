@@ -91,6 +91,14 @@ enum class ApMode {
 };
 
 } // namespace wifi
+
+namespace settings {
+namespace internal {
+
+String serialize(wifi::Mac);
+
+} // namespace internal
+} // namespace settings
 } // namespace espurna
 
 // Note that 'connected' status is *only* for the WiFi STA.
