@@ -97,7 +97,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Build
+          name: Build_${{ matrix.thread }}
           path: Build_${{ matrix.thread }}.zip
 
   upload:
@@ -110,10 +110,14 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          merge-multiple: true
           path: artifacts/
+          pattern: Build_*
 
       - name: Unpack
-        run: unzip -d build "artifacts/Build/*.zip"
+        run: |
+          ls --recursive artifacts
+          unzip -d build "artifacts/*.zip"
 
       - name: Prepare debug info
         run: |
