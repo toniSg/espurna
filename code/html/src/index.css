@@ -304,13 +304,15 @@ span.slider {
    -------------------------------------------------------------------------- */
 
 input.checkbox-toggle {
-    --toggle-text-color: #fff;
+    --toggle-text-color: white;
     --toggle-border-radius: 100px;
     --toggle-handle-size: .6em;
     --toggle-elem-size: 2em;
     --toggle-bg-size: 3em;
     --toggle-handle-gap: .2em;
-    --toggle-fg: #c00000;
+    --toggle-color-off: #c00000; /* redish */
+    --toggle-color-on: #00c000; /* greenish */
+    --toggle-fg: var(--toggle-color-off);
     --toggle-bg: color-mix(in srgb, var(--toggle-fg) 20%, transparent);
 
     appearance: none;
@@ -333,17 +335,13 @@ input.checkbox-toggle {
 /* only ::before is used for content, adjust padding to move the toggle to a specific position */
 input.checkbox-toggle:checked {
     padding-inline: var(--toggle-bg-size) 0;
-    --toggle-fg: #00c000; /* greenish */
+    --toggle-fg: var(--toggle-color-on);
 }
 
 input.checkbox-toggle::before {
     text-align: center;
     color: var(--toggle-text-color);
     width: var(--toggle-elem-size);
-}
-
-input.checkbox-toggle:checked::before {
-    --toggle-fg: #00c000; /* greenish */
 }
 
 /* checkboxes are usually allow DISABLING and ENABLING settings */
@@ -363,6 +361,16 @@ input.checkbox-toggle::before {
     transition: inherit;
 }
 
+/* module-light */
+input[name=light-state-value].checkbox-toggle {
+    --toggle-color-off: black;
+    --toggle-color-on: #fdfd3e;
+}
+
+input[name=light-state-value].checkbox-toggle:checked::before {
+    --toggle-text-color: black;
+}
+
 /* module-relay */
 input[name=relay].checkbox-toggle::before,
 input[name=light-state-value].checkbox-toggle::before {
@@ -380,14 +388,17 @@ input[name=thermostatMode].checkbox-toggle::before {
     --toggle-bg-size: 3em;
 }
 
+input[name=thermostatMode].checkbox-toggle {
+    --toggle-color-off: hsl(0, 100%, 50%);
+    --toggle-color-on: hsl(180, 100%, 50%);
+}
+
 input[name=thermostatMode].checkbox-toggle::before {
-    --toggle-fg: hsl(0, 100%, 50%);
     content: "HEATER";
 }
 
 input[name=thermostatMode].checkbox-toggle:checked::before {
-    --toggle-fg: hsl(180, 100%, 50%);
-    color: black;
+    --toggle-text-color: black;
     content: "COOLER";
 }
 

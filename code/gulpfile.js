@@ -419,7 +419,7 @@ function buildWebUI(name, modules, compress = true) {
 function serveWebUI(name, modules) {
     const server = http.createServer();
 
-    server.on('request', function(request, response) {
+    server.on('request', (request, response) => {
         buildHtml(name, modules, false).pipe(
             through.obj(function(source, _, callback) {
                 const url = new URL(`http://localhost${request.url}`);
@@ -463,7 +463,11 @@ function serveWebUI(name, modules) {
             }));
     });
 
-    server.listen(8080);
+    server.on('listening', () => {
+        console.log(`Serving ${SRC_DIR} index and *.mjs at`, server.address());
+    });
+
+    server.listen(8080, 'localhost');
 }
 
 // -----------------------------------------------------------------------------
