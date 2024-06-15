@@ -5,6 +5,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Pending changes
 
+???
+
+## [1.16.0-dev] Snapshot build 2024-06-15
+
 ### Added
 - Scheduler sunrise and sunset time triggers [#2417](https://github.com/xoseperez/espurna/issues/2417), [#1263](https://github.com/xoseperez/espurna/issues/1263), [#943](https://github.com/xoseperez/espurna/issues/943)
 - Allow to specify date (`YYYY-MM-DD` or `MM-DD`) for scheduler action [#2060](https://github.com/xoseperez/espurna/issues/2060)
