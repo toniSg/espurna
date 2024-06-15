@@ -25,7 +25,7 @@ Build = collections.namedtuple("Build", "env extends build_flags build_src_flags
 
 
 def expand_variables(cfg, value):
-    RE_VARS = re.compile("\$\{.*?\}")
+    RE_VARS = re.compile(r"\$\{.*?\}")
 
     for var in RE_VARS.findall(value):
         section, option = var.replace("${", "").replace("}", "").split(".", 1)
@@ -35,7 +35,7 @@ def expand_variables(cfg, value):
 
 
 def get_builds(cfg):
-    RE_NEWLINE = re.compile("\r\n|\n")
+    RE_NEWLINE = re.compile(r"\r\n|\n")
     BASE_BUILD_FLAGS = set(
         shlex.split(expand_variables(cfg, cfg.get("env", "build_flags")))
     )
