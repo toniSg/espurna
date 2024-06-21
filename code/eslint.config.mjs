@@ -3,6 +3,21 @@ import js from '@eslint/js';
 
 export default [
     {
+        files: ['gulpfile.mjs'],
+        languageOptions: {
+            "globals": {
+                ...globals.es2021,
+                ...globals.node,
+            }
+        },
+        rules: {
+            ...js.configs.recommended.rules,
+            "no-unused-vars": ["error", {
+                "argsIgnorePattern": "^_",
+            }],
+        }
+    },
+    {
         files: ['html/src/**/*.mjs'],
         languageOptions: {
             "globals": {

@@ -16,8 +16,7 @@ case "$1" in
     popd
     ;;
 ("webui")
-    npm exec --no -- eslint html/src/*.mjs
-    npm exec --no -- eslint gulpfile.js
+    npm exec --no -- eslint
     npm exec --no -- html-validate html/src/*.html
     # checks whether the webui can be built
     ./build.sh -f environments
