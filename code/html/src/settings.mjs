@@ -426,7 +426,9 @@ export function setSpanValue(span, value) {
             span.appendChild(document.createElement("br"));
         });
     } else {
-        value = span.dataset[`value${value.toUpperCase()}`] || value;
+        if (typeof(value) === "string") {
+            value = span.dataset[`value${value.toUpperCase()}`] || value;
+        }
         let content = "";
         if (span.attributes.pre) {
             content += span.attributes.pre.value;
@@ -677,7 +679,9 @@ export function updateKeyValue(key, value) {
         }
     }
 
-    initGenericKeyValueElement(key, value);
+    if (typeof(value) !== "object") {
+        initGenericKeyValueElement(key, value);
+    }
 }
 
 function onSaved(value) {
