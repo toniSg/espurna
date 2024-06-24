@@ -728,7 +728,8 @@ void update(time_t timestamp, const tm& today, T&& compare) {
 }
 
 String format_match(const EventMatch& match) {
-    return datetime::format_local(event_seconds(match.last).count());
+    return datetime::format_local_tz(
+        datetime::make_context(event_seconds(match.last)));
 }
 
 // check() needs current or future events, discard timestamps in the past

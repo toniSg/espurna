@@ -21,7 +21,6 @@ import {
     applySettings,
     getData,
     setChangedElement,
-    updateKeyValue,
     updateVariables,
     variableListeners,
 } from './settings.mjs';
@@ -52,7 +51,10 @@ import { init as initThingspeak } from './thingspeak.mjs';
 let KeepTime = null;
 
 let Ago = 0;
-let Now = 0;
+let Now = {
+    date: null,
+    offset: "",
+};
 
 const __title_cache = {
     "hostname": "?",
@@ -82,8 +84,13 @@ function modulesVisibleAll() {
         });
 }
 
-function deviceClock(value) {
-    Now = parseInt(value, 10);
+function deviceNow(value) {
+    try {
+        Now.date = normalizedDate(value);
+        Now.offset = timestampOffset(value);
+    } catch (e) {
+        notifyError(null, null, 0, 0, e);
+    }
 }
 
 function onAction(value) {
@@ -110,20 +117,43 @@ function deviceUptime() {
     Ago = 0;
 }
 
+function timestampDatetime(timestamp) {
+    return timestamp.slice(0, 19);
+}
+
+function timestampOffset(timestamp) {
+    if (timestamp.endsWith("Z")) {
+        return "Z";
+    }
+
+    return timestamp.slice(-6);
+}
+
+function displayDatetime(now) {
+    let datetime = timestampDatetime(now.date.toISOString());
+    datetime = datetime.replace("T", " ");
+    datetime = `${datetime} ${now.offset}`;
+
+    return datetime;
+}
+
+function normalizedTimestamp(timestamp) {
+    return `${timestampDatetime(timestamp)}Z`;
+}
+
+function normalizedDate(timestamp) {
+    return new Date(normalizedTimestamp(timestamp));
+}
+
 function keepTime() {
     document.querySelector("span[data-key='app:ago']").textContent = Ago;
     ++Ago;
 
-    if (0 === Now) {
-        return;
+    if (null !== Now.date) {
+        document.querySelector("span[data-key='app:now']")
+            .textContent = displayDatetime(Now);
+        Now.date = new Date(Now.date.valueOf() + 1000);
     }
-
-    let text = (new Date(Now * 1000))
-        .toISOString().substring(0, 19)
-        .replace("T", " ");
-
-    document.querySelector("span[data-key='app:now']").textContent = text;
-    ++Now;
 }
 
 function listeners() {
@@ -141,7 +171,7 @@ function listeners() {
             modulesVisible(value);
         },
         "now": (_, value) => {
-            deviceClock(value);
+            deviceNow(value);
         },
         "uptime": deviceUptime,
         "webMode": (_, value) => {
@@ -325,7 +355,11 @@ function init() {
 
     // don't autoconnect w/ localhost or file://
     if (MODULE_LOCAL) {
-        updateKeyValue("webMode", 0);
+        updateVariables({
+            webMode: 0,
+            now: "2024-01-01T00:00:00+01:00",
+        });
+        KeepTime = setInterval(keepTime, 1000);
         modulesVisibleAll();
         return;
     }

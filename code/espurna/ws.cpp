@@ -13,12 +13,14 @@ Copyright (C) 2016-2019 by Xose Pérez <xose dot perez at gmail dot com>
 #include <queue>
 #include <vector>
 
-#include "system.h"
+#include "datetime.h"
 #include "ntp.h"
+#include "system.h"
 #include "utils.h"
-#include "ws.h"
 #include "web.h"
 #include "wifi.h"
+
+#include "ws.h"
 #include "ws_internal.h"
 
 #include "libs/WebSocketIncomingBuffer.h"
@@ -125,40 +127,6 @@ template <typename T>
 struct BaseTimeFormat {
 };
 
-template <>
-struct BaseTimeFormat<int> {
-    static constexpr size_t Size = sizeof(int);
-    static constexpr char Format[] = "%d";
-};
-
-constexpr char BaseTimeFormat<int>::Format[];
-
-template <>
-struct BaseTimeFormat<long> {
-    static constexpr size_t Size = sizeof(long);
-    static constexpr char Format[] = "%ld";
-};
-
-constexpr char BaseTimeFormat<long>::Format[];
-
-template <>
-struct BaseTimeFormat<long long> {
-    static constexpr size_t Size = sizeof(long long);
-    static constexpr char Format[] = "%lld";
-};
-
-constexpr char BaseTimeFormat<long long>::Format[];
-
-String _wsFormatTime(time_t timestamp) {
-    using SystemTimeFormat = BaseTimeFormat<time_t>;
-
-    char buffer[SystemTimeFormat::Size * 4];
-    snprintf(buffer, sizeof(buffer),
-        SystemTimeFormat::Format, timestamp);
-
-    return String(buffer);
-}
-
 void _wsUpdateAp(JsonObject& root) {
     IPAddress ip{};
 
@@ -198,21 +166,15 @@ void _wsUpdateStats(JsonObject& root) {
 }
 
 #if NTP_SUPPORT
-void _wsUpdateNtp(JsonObject& root) {
+void _wsUpdateTime(JsonObject& root) {
     if (!ntpSynced()) {
         return;
     }
 
-    // XXX: arduinojson default config will silently downcast
-    //      double to float and (u)int64_t to (u)int32_t.
-    //      convert to string instead, and assume the int is handled correctly
-    const auto info = ntpInfo();
+    using namespace espurna::datetime;
 
-    root[F("now")] = _wsFormatTime(info.now);
-    root[F("nowString")] = info.utc;
-    root[F("nowLocalString")] = info.local.length()
-        ? info.local
-        : info.utc;
+    const auto ctx = make_context(time(nullptr));
+    root[F("now")] = format_local_tz(ctx);
 }
 #endif
 
@@ -221,7 +183,7 @@ void _wsUpdate(JsonObject& root) {
     _wsUpdateSta(root);
     _wsUpdateStats(root);
 #if NTP_SUPPORT
-    _wsUpdateNtp(root);
+    _wsUpdateTime(root);
 #endif
 }
 
