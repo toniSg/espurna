@@ -108,7 +108,7 @@ const MODULES_ALL = Object.fromEntries(
 
 // webui_serve does not also start ws server, but intead runs some local-only code
 const MODULES_LOCAL =
-    Object.assign(MODULES_ALL, {'local': true});
+    Object.assign(MODULES_ALL, {local: true});
 
 /**
  * generic output, usually this includes a single module
@@ -124,6 +124,15 @@ const NAMED_BUILD = {
     'rfm69': 'rfm69',
     'sensor': 'sns',
     'thermostat': 'thermostat',
+};
+
+// vendored sources from node_modules/ need explicit paths
+const NODE_DIR = path.join('node_modules');
+
+// importmap manifest for dev server. atm, explicit list
+// TODO import.meta.resolve wants umd output for some reason
+const IMPORT_MAP = {
+    '@jaames/iro': '/@jaames/iro/dist/iro.es.js',
 };
 
 // input sources, making sure relative paths start here
@@ -242,7 +251,7 @@ function forceNoSideEffects() {
  * @param {{[k: string]: boolean}} modules
  * @returns {{[k: string]: boolean}}
  */
-function makeDefines(modules) {
+function makeDefine(modules) {
     return Object.fromEntries(
         Object.entries(modules).map(
             ([key, value]) => {
@@ -257,7 +266,7 @@ function makeDefines(modules) {
  * @param {{[k: string]: boolean}} modules
  * @param {boolean} minify
  */
-async function inlineJavascriptBundle(sourcefile, contents, resolveDir, modules, minify) {
+async function inlineJavascriptBundle(sourcefile, contents, resolveDir, define, minify) {
     return await esbuildBuild({
         stdin: {
             contents,
@@ -269,9 +278,14 @@ async function inlineJavascriptBundle(sourcefile, contents, resolveDir, modules,
         plugins: [
             forceNoSideEffects(),
         ],
-        define: makeDefines(modules),
+        define,
         minify,
-        platform: 'browser',
+        platform: minify
+            ? 'browser'
+            : 'neutral',
+        external: minify
+            ? undefined
+            : ['./*.mjs'],
         write: false,
     });
 }
@@ -293,7 +307,6 @@ function inlineHandler(srcdir, modules, compress) {
         // (although, could be handled by jsdom afterwards; top elem does not usually have classList w/ module)
         for (let module of source.props?.module?.split(',') ?? []) {
             if (!modules[module]) {
-                source.compress = false;
                 source.content = Buffer.from('');
                 source.replace = '<div></div>';
                 return;
@@ -302,16 +315,29 @@ function inlineHandler(srcdir, modules, compress) {
 
         // main entrypoint of the app, usually a script bundle
         if (source.format === 'mjs') {
+            const define = makeDefine(modules);
+
             const result = await inlineJavascriptBundle(
                 source.sourcepath,
                 source.fileContent,
-                srcdir, modules, compress);
+                srcdir, define, compress);
             if (!result.outputFiles.length) {
                 throw 'js bundle cannot be empty';
             }
 
-            source.content = Buffer.from(result.outputFiles[0].contents);
-            source.compress = false;
+            let content = Buffer.from(result.outputFiles[0].contents);
+
+            if (!compress) {
+                let prepend = '';
+                for (const [key, value] of Object.entries(define)) {
+                    prepend += `const ${key} = ${value};\n`;
+                }
+
+                content = Buffer.concat([
+                    Buffer.from(prepend), content]);
+            }
+
+            source.content = content;
             return;
         }
 
@@ -353,6 +379,29 @@ function modifyHtml(handlers) {
 
         callback(null, source);
     });
+}
+
+/**
+ * optionally inject external libs paths
+ * @return {HtmlModify}
+ */
+function injectVendor(compress) {
+    return function(dom) {
+        if (compress) {
+            return false;
+        }
+
+        const script = dom.window.document.getElementsByTagName('script');
+
+        const importmap = dom.window.document.createElement('script');
+        importmap.setAttribute('type', 'importmap');
+        importmap.textContent = JSON.stringify({imports: IMPORT_MAP});
+
+        const head = dom.window.document.getElementsByTagName('head')[0];
+        head.insertBefore(importmap, script[0]);
+
+        return true;
+    }
 }
 
 /**
@@ -460,6 +509,7 @@ function buildHtml(name, modules, compress) {
     const out = source(ENTRYPOINT)
         .pipe(makeInlineSource(SRC_DIR, modules, compress))
         .pipe(modifyHtml([
+            injectVendor(compress),
             stripModules(modules),
             externalBlank(),
         ]));
@@ -511,16 +561,26 @@ function buildWebUI(name, modules, compress = true) {
 function serveWebUI(name, modules) {
     const server = http.createServer();
 
-    server.on('request', (request, response) => {
-        buildHtml(name, modules, false).pipe(
-            through.obj(function(source, _, callback) {
-                const url = new URL(`http://localhost${request.url}`);
+    function responseJsFile(response, path) {
+        response.writeHead(200, {
+            'Content-Type': 'text/javascript',
+        });
+        fs.createReadStream(path)
+            .pipe(response);
+    }
 
-                // serve bundled html as-is, do not minify
-                switch (url.pathname) {
-                case '/':
-                case '/index.htm':
-                case '/index.html':
+    fs.access
+
+    server.on('request', (request, response) => {
+        const url = new URL(`http://localhost${request.url}`);
+
+        // serve bundled html as-is, do not minify
+        switch (url.pathname) {
+        case '/':
+        case '/index.htm':
+        case '/index.html':
+            buildHtml(name, modules, false).pipe(
+                through.obj(function(source, _, callback) {
                     response.writeHead(200, {
                         'Content-Type': 'text/html',
                         'Content-Length': source.contents.length,
@@ -530,29 +590,31 @@ function serveWebUI(name, modules) {
                     response.end();
 
                     callback(null, source);
-                    return;
-                }
-
-                // when module files need browser repl. but, note the bundling scope
-                // and unavailable external modules (i.e. node_modules/*)
-                if (url.pathname.endsWith('.mjs')) {
-                    const name = url.pathname.split('/').at(-1);
-
-                    response.writeHead(200, {
-                        'Content-Type': 'text/javascript',
-                    });
-
-                    fs.createReadStream(path.join(SRC_DIR, name))
-                        .pipe(response);
-                    callback(null, source);
-                    return;
-                }
-
-                response.writeHead(500, {'content-type': 'text/plain'});
-                response.end('500');
-
-                callback(null, source);
             }));
+
+            return;
+        }
+
+        // when module files need browser repl. note the bundling scope,
+        // only this way modules are actually modules and not inlined
+
+        // external libs should be searched in node_modules/
+        for (let value of Object.values(IMPORT_MAP)) {
+            if (value === url.pathname) {
+                responseJsFile(response, path.join(NODE_DIR, name));
+                return;
+            }
+        }
+
+        // everything else is attempted as html/src/${module}.mjs
+        if (url.pathname.endsWith('.mjs')) {
+            const name = url.pathname.split('/').at(-1);
+            responseJsFile(response, path.join(SRC_DIR, name));
+            return;
+        }
+
+        response.writeHead(500, {'content-type': 'text/plain'});
+        response.end('500');
     });
 
     server.on('listening', () => {
