@@ -2,29 +2,13 @@ import {
     addSimpleEnumerables,
     fromSchema,
     groupSettingsOnAdd,
-    idForContainer,
     variableListeners,
 } from './settings.mjs';
 
-import {
-    fillTemplateLineFromCfg,
-    loadConfigTemplate,
-    mergeTemplate,
-} from './template.mjs';
+import { addFromTemplate } from './template.mjs';
 
 function addNode(cfg) {
-    let container = document.getElementById("leds");
-
-    let id = idForContainer(container);
-    if (id < 0) {
-        return;
-    }
-
-    let line = loadConfigTemplate("led-config");
-    line.querySelector("span").textContent = id;
-    fillTemplateLineFromCfg(line, id, cfg);
-
-    mergeTemplate(container, line);
+    addFromTemplate(document.getElementById("leds"), "led-config", cfg);
 }
 
 function listeners() {

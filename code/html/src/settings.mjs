@@ -174,9 +174,26 @@ function onGroupSettingsEventDel(event) {
 // 'button-add-settings-group' will trigger update on the specified 'data-settings-group' element id, which
 // needs to have 'settings-group-add' event handler attached to it.
 
+function groupSettingsCheckMax(event) {
+    const max = event.target.dataset["settingsMax"];
+    const val = 1 + event.target.children.length;
+
+    if ((max !== undefined) && (parseInt(max, 10) < val)) {
+        alert(`Max number of ${event.target.id} has been reached (${val} out of ${max})`);
+        return false;
+    }
+
+    return true;
+}
+
 export function groupSettingsOnAdd(elementId, listener) {
     document.getElementById(elementId)
         .addEventListener("settings-group-add", (event) => {
+            event.stopPropagation();
+            if (!groupSettingsCheckMax(event)) {
+                return;
+            }
+
             listener(event);
             onGroupSettingsEventAdd(event);
         });
@@ -590,23 +607,6 @@ export function initGenericKeyValueElement(key, value) {
     }
 
     setOriginalsFromValues(inputs);
-}
-
-export function idForContainer(container) {
-    let id = container.childElementCount;
-
-    let settingsMax = container.dataset["settingsMax"];
-    if (settingsMax === undefined) {
-        return id;
-    }
-
-    let max = parseInt(settingsMax, 10);
-    if (id < max) {
-        return id;
-    }
-
-    alert(`Max number of ${container.id} has been reached (${id} out of ${max})`);
-    return -1;
 }
 
 const Settings = new SettingsBase();

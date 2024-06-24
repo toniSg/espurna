@@ -1,38 +1,20 @@
 import {
     fromSchema,
     groupSettingsOnAdd,
-    idForContainer,
     variableListeners,
 } from './settings.mjs';
 
-import {
-    fillTemplateLineFromCfg,
-    loadConfigTemplate,
-    mergeTemplate,
-} from './template.mjs';
-
+import { addFromTemplate } from './template.mjs';
 import { moreElem } from './core.mjs';
 import { sendAction } from './connection.mjs';
 
 function addNode(cfg, showMore) {
-    let container = document.getElementById("networks");
+    const container = document.getElementById("networks");
+    addFromTemplate(container, "network-config", cfg);
 
-    let id = idForContainer(container);
-    if (id < 0) {
-        return;
+    if ((showMore === undefined) || showMore) {
+        moreElem(container.lastChild)
     }
-
-    if (showMore === undefined) {
-        showMore = true;
-    }
-
-    let line = loadConfigTemplate("network-config");
-    fillTemplateLineFromCfg(line, id, cfg);
-    if (showMore) {
-        moreElem(line);
-    }
-
-    mergeTemplate(container, line);
 }
 
 function scanResult(values) {
