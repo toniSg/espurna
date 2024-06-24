@@ -108,7 +108,7 @@ const MODULES_ALL = Object.fromEntries(
 
 // webui_serve does not also start ws server, but intead runs some local-only code
 const MODULES_LOCAL =
-    Object.assign(MODULES_ALL, {local: true});
+    Object.assign({}, MODULES_ALL, {local: true});
 
 /**
  * generic output, usually this includes a single module
