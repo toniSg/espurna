@@ -1,5 +1,3 @@
-/// <reference lib="es2022" />
-
 /*
 
 ESP8266 file system builder
@@ -39,7 +37,6 @@ import { JSDOM } from 'jsdom';
 
 import { default as gzip } from 'gulp-gzip';
 import { default as rename } from 'gulp-rename';
-import { default as replace } from 'gulp-replace';
 
 import * as through from 'through2';
 
@@ -501,6 +498,24 @@ function makeInlineSource(srcdir, modules, compress) {
             });
 
         source.contents = Buffer.from(result);
+
+        callback(null, source);
+    });
+}
+
+/**
+ * @param {string} lhs
+ * @param {string} rhs
+ * @return {StreamTransform}
+ */
+function replace(lhs, rhs) {
+    return through.obj(function (source, _, callback) {
+        if (source.isStream() || !source.contents) {
+            throw 'expecting source contents to be a buffer!';
+        }
+
+        const before = source.contents.toString();
+        source.contents = Buffer.from(before.replaceAll(lhs, rhs));
 
         callback(null, source);
     });
