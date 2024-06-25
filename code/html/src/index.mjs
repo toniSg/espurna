@@ -68,29 +68,18 @@ let Ago = 0;
  * @typedef {{date: Date | null, offset: string}} NowType
  * @type NowType
  */
-
 const Now = {
     date: null,
     offset: "",
 };
 
 /**
- * @param {{[k: string]: string}} cache
- * @param {string} key
- * @param {string} value
- */
-function documentTitleCache(cache, key, value) {
-    cache[key] = value;
-    document.title = `${cache.hostname} - ${cache.app_name} ${cache.app_version}`;
-}
-
-/**
  * @type {{[k: string]: string}}
  */
 const __title_cache = {
-    "hostname": "?",
-    "app_name": "ESPurna",
-    "app_version": "0.0.0",
+    hostname: "?",
+    app_name: "ESPurna",
+    app_version: "0.0.0",
 };
 
 /**
@@ -98,7 +87,8 @@ const __title_cache = {
  * @param {string} value
  */
 function documentTitle(key, value) {
-    documentTitleCache(__title_cache, key, value);
+    __title_cache[key] = value;
+    document.title = `${__title_cache.hostname} - ${__title_cache.app_name} ${__title_cache.app_version}`;
 }
 
 /**
@@ -222,12 +212,19 @@ function normalizedDate(value) {
 
 
 function keepTime() {
-    document.querySelector("span[data-key='app:ago']").textContent = Ago.toString();
+    const ago = document.querySelector("span[data-key='app:ago']");
+    if (ago) {
+        ago.textContent = Ago.toString();
+    }
+
     ++Ago;
 
     if (null !== Now.date) {
-        document.querySelector("span[data-key='app:now']")
-            .textContent = displayDatetime(Now);
+        const now = document.querySelector("span[data-key='app:now']");
+        if (now) {
+            now.textContent = displayDatetime(Now);
+        }
+
         Now.date = new Date(Now.date.valueOf() + 1000);
     }
 }
@@ -275,10 +272,14 @@ function generatePassword() {
  */
 function generatePasswordsForForm(form) {
     const value = generatePassword();
-    for (let elem of [form.elements.adminPass0, form.elements.adminPass1]) {
-        setChangedElement(elem);
-        elem.type = "text";
-        elem.value = value;
+
+    for (let name of ["adminPass0", "adminPass1"]) {
+        const elem = form.elements.namedItem(name);
+        if (elem && elem instanceof HTMLInputElement) {
+            setChangedElement(elem);
+            elem.type = "text";
+            elem.value = value;
+        }
     }
 }
 
@@ -287,7 +288,7 @@ function generatePasswordsForForm(form) {
  */
 function initSetupPassword(form) {
     document.querySelector(".button-setup-password")
-        .addEventListener("click", (event) => {
+        ?.addEventListener("click", (event) => {
             event.preventDefault();
             const forms = [form];
             if (validateFormsPasswords(forms, true)) {
@@ -295,7 +296,7 @@ function initSetupPassword(form) {
             }
         });
     document.querySelector(".button-generate-password")
-        .addEventListener("click", (event) => {
+        ?.addEventListener("click", (event) => {
             event.preventDefault();
             generatePasswordsForForm(form);
         });
@@ -348,7 +349,11 @@ function onJsonPayload(event) {
 
 function init() {
     // Initial page, when webMode only allows to change the password
-    initSetupPassword(document.forms["form-setup-password"]);
+    const passwd = document.forms.namedItem("form-setup-password");
+    if (passwd) {
+        initSetupPassword(passwd);
+    }
+
     document.querySelectorAll(".password-reveal")
         .forEach((elem) => {
             elem.addEventListener("click", toggleVisiblePassword);
@@ -356,14 +361,14 @@ function init() {
 
     // Sidebar menu & buttons
     document.querySelector(".menu-link")
-        .addEventListener("click", toggleMenu);
+        ?.addEventListener("click", toggleMenu);
     document.querySelectorAll(".pure-menu-link")
         .forEach((elem) => {
             elem.addEventListener("click", showPanel);
         });
 
     document.querySelector(".button-reconnect")
-        .addEventListener("click", askAndCallReconnect);
+        ?.addEventListener("click", askAndCallReconnect);
     document.querySelectorAll(".button-reboot")
         .forEach((elem) => {
             elem.addEventListener("click", askAndCallReboot);
