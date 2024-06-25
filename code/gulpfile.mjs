@@ -1,3 +1,5 @@
+/// <reference lib="es2022" />
+
 /*
 
 ESP8266 file system builder
@@ -60,6 +62,16 @@ import * as path from 'node:path';
  */
 
 /**
+ * name mapping for output filename, when specific module is used
+ * @typedef {{[k: string]: string}} NamedBuild
+ */
+
+/**
+ * declare `MODULE_${NAME}` boolean consts in the source, allowing esbuild to strip unused code
+ * @typedef {{[k: string]: string}} Defines
+ */
+
+/**
  * helper functions that deal with 'module' elements
  * @typedef {function(JSDOM): boolean} HtmlModify
  */
@@ -113,7 +125,7 @@ const MODULES_LOCAL =
 /**
  * generic output, usually this includes a single module
  * @constant
- * @type {Modules}
+ * @type {NamedBuild}
  */
 const NAMED_BUILD = {
     'curtain': 'curtain',
@@ -167,7 +179,7 @@ function toMinifiedHtml(options) {
     });
 }
 
-/*
+/**
  * @param {string} name
  * @returns {string}
  */
@@ -175,7 +187,7 @@ function safename(name) {
     return path.basename(name).replaceAll('.', '_');
 }
 
-/*
+/**
  * @param {string} name
  * @returns {StreamTransform}
  */
@@ -224,7 +236,7 @@ function adjustFileStat() {
     });
 }
 
-/*
+/**
  * ref. https://github.com/evanw/esbuild/issues/1895
  * from our side, html/src/*.mjs (with the exception of index.mjs) require 'init()' call to be actually set up and used
  * as the result, no code from the module should be bundled into the output when module was not initialized
@@ -248,8 +260,8 @@ function forceNoSideEffects() {
 /**
  * ref. html/src/index.mjs
  * TODO exportable values, e.g. in build.mjs? right now, false-positive of undeclared values, plus see 'forceNoSideEffects()'
- * @param {{[k: string]: boolean}} modules
- * @returns {{[k: string]: boolean}}
+ * @param {Modules} modules
+ * @returns {Defines}
  */
 function makeDefine(modules) {
     return Object.fromEntries(
@@ -263,7 +275,7 @@ function makeDefine(modules) {
  * @param {string} sourcefile
  * @param {string} contents
  * @param {string} resolveDir
- * @param {{[k: string]: boolean}} modules
+ * @param {Defines} define
  * @param {boolean} minify
  */
 async function inlineJavascriptBundle(sourcefile, contents, resolveDir, define, minify) {
@@ -292,7 +304,7 @@ async function inlineJavascriptBundle(sourcefile, contents, resolveDir, define, 
 
 /**
  * @param {string} srcdir
- * @param {{[k: string]: boolean}} modules
+ * @param {Modules} modules
  * @param {boolean} compress
  * @return {import("inline-source").Handler}
  */
@@ -305,16 +317,19 @@ function inlineHandler(srcdir, modules, compress) {
 
         // specific elements can be excluded at this point
         // (although, could be handled by jsdom afterwards; top elem does not usually have classList w/ module)
-        for (let module of source.props?.module?.split(',') ?? []) {
-            if (!modules[module]) {
-                source.content = Buffer.from('');
-                source.replace = '<div></div>';
-                return;
+        const source_module = source.props.module;
+        if (typeof source_module === 'string') {
+            for (let module of source_module.split(',')) {
+                if (!modules[module]) {
+                    source.content = '';
+                    source.replace = '<div></div>';
+                    return;
+                }
             }
         }
 
         // main entrypoint of the app, usually a script bundle
-        if (source.format === 'mjs') {
+        if (source.sourcepath && typeof source.sourcepath === 'string' && source.format === 'mjs') {
             const define = makeDefine(modules);
 
             const result = await inlineJavascriptBundle(
@@ -337,7 +352,7 @@ function inlineHandler(srcdir, modules, compress) {
                     Buffer.from(prepend), content]);
             }
 
-            source.content = content;
+            source.content = content.toString();
             return;
         }
 
@@ -383,6 +398,7 @@ function modifyHtml(handlers) {
 
 /**
  * optionally inject external libs paths
+ * @param {boolean} compress
  * @return {HtmlModify}
  */
 function injectVendor(compress) {
@@ -453,7 +469,7 @@ function stripModules(modules) {
                 }
 
                 if (remove) {
-                    elem.parentElement.removeChild(elem);
+                    elem.parentElement?.removeChild(elem);
                     changed = true;
                 }
             }
@@ -492,11 +508,11 @@ function makeInlineSource(srcdir, modules, compress) {
 
 /**
  * @param {string} name
- * @param {Modules} modules
- * @param {boolean} compress
+ * @param {Modules} [modules]
+ * @param {boolean} [compress]
  * @return {NodeJS.ReadWriteStream}
  */
-function buildHtml(name, modules, compress) {
+function buildHtml(name, modules, compress = true) {
     if (modules === undefined) {
         modules = Object.assign({}, DEFAULT_MODULES);
         modules[NAMED_BUILD[name]] = true;
@@ -546,8 +562,8 @@ function buildOutputs(name, stream) {
 
 /**
  * @param {string} name
- * @param {{[k: string]: boolean}} modules
- * @param {boolean} compress
+ * @param {Modules} [modules]
+ * @param {boolean} [compress]
  * @return {NodeJS.ReadWriteStream}
  */
 function buildWebUI(name, modules, compress = true) {
@@ -556,11 +572,15 @@ function buildWebUI(name, modules, compress = true) {
 
 /**
  * @param {string} name
- * @param {{[k: string]: boolean}} modules
+ * @param {Modules} modules
  */
 function serveWebUI(name, modules) {
     const server = http.createServer();
 
+    /**
+     * @param {http.ServerResponse<http.IncomingMessage>} response
+     * @param {string} path
+     */
     function responseJsFile(response, path) {
         response.writeHead(200, {
             'Content-Type': 'text/javascript',
@@ -609,8 +629,10 @@ function serveWebUI(name, modules) {
         // everything else is attempted as html/src/${module}.mjs
         if (url.pathname.endsWith('.mjs')) {
             const name = url.pathname.split('/').at(-1);
-            responseJsFile(response, path.join(SRC_DIR, name));
-            return;
+            if (name !== undefined) {
+                responseJsFile(response, path.join(SRC_DIR, name));
+                return;
+            }
         }
 
         response.writeHead(500, {'content-type': 'text/plain'});
