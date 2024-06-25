@@ -1,3 +1,5 @@
+/// <reference path="index.build.d.mts" />
+
 /**
  * @typedef {function(string, any): void} Listener
  */
