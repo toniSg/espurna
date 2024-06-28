@@ -10,6 +10,9 @@ import { validateForms } from './validate.mjs';
 // If selectedIndex is -1, it means we never selected anything
 // (TODO: could this actually happen with anything other than empty <select>?)
 
+/**
+ * @param {HTMLSelectElement} select
+ */
 function stringifySelectedValues(select) {
     if (select.multiple) {
         return Array.from(select.selectedOptions)
@@ -22,30 +25,49 @@ function stringifySelectedValues(select) {
     return select.dataset["original"];
 }
 
+/**
+ * @param {HTMLElement} elem
+ */
 export function isChangedElement(elem) {
-    return "true" === elem.dataset["changed"];
+    return stringToBoolean(elem.dataset["changed"] ?? "");
 }
 
+/**
+ * @param {HTMLElement} elem
+ */
 export function setChangedElement(elem) {
     elem.dataset["changed"] = "true";
 }
 
+/**
+ * @param {HTMLElement} elem
+ */
 export function resetChangedElement(elem) {
     elem.dataset["changed"] = "false";
 }
 
+/**
+ * @param {HTMLElement} elem
+ */
 function resetGroupPending(elem) {
     elem.dataset["settingsGroupPending"] = "";
 }
 
 // TODO: note that we also include kv schema as 'data-settings-schema' on the container.
 // produce a 'set' and compare instead of just matching length?
+
+/**
+ * @param {string[]} source
+ * @param {string[]} schema
+ * @returns {{[k: string]: string}}
+ */
 export function fromSchema(source, schema) {
     if (schema.length !== source.length) {
         throw `Schema mismatch! Expected length ${schema.length} vs. ${source.length}`;
     }
 
-    var target = {};
+    /** @type {{[k: string]: string}} */
+    let target = {};
     schema.forEach((key, index) => {
         target[key] = source[index];
     });
@@ -61,26 +83,45 @@ export function fromSchema(source, schema) {
 // TODO: distinguish 'current' state to avoid sending keys when adding and immediatly removing the latest node?
 // TODO: previous implementation relied on defaultValue and / or jquery $(...).val(), but this does not really work where 'line' only has <select>
 
+/**
+ * @typedef {HTMLInputElement | HTMLSelectElement} InputOrSelect
+ * @typedef {{element: InputOrSelect, key: string, value: ElementValue}} GroupElementInfo
+ *
+ * @param {Element} target
+ * @returns {GroupElementInfo[]}
+ */
 function groupElementInfo(target) {
+    /** @type {GroupElementInfo[]} */
     const out = [];
 
+    /** @type {NodeListOf<InputOrSelect>} */
     const inputs = target.querySelectorAll("input,select");
+
     inputs.forEach((elem) => {
         const name = elem.dataset.settingsRealName || elem.name;
         if (name === undefined) {
             return;
         }
 
+        const value = getOriginalForElement(elem) ?? getDataForElement(elem);
+        if (null === value) {
+            return;
+        }
+
         out.push({
             element: elem,
             key: name,
-            value: elem.dataset["original"] || getDataForElement(elem)
+            value: value,
         });
     });
 
     return out;
 }
 
+/**
+ * @param {HTMLElement} elem
+ * @returns {string[]}
+ */
 function getGroupPending(elem) {
     const raw = elem.dataset["settingsGroupPending"] || "";
     if (!raw.length) {
@@ -90,12 +131,20 @@ function getGroupPending(elem) {
     return raw.split(",");
 }
 
+/**
+ * @param {HTMLElement} elem
+ * @param {number} index
+ */
 function addGroupPending(elem, index) {
     const pending = getGroupPending(elem);
     pending.push(`set:${index}`);
     elem.dataset["settingsGroupPending"] = pending.join(",");
 }
 
+/**
+ * @param {HTMLElement} elem
+ * @param {number} index
+ */
 function popGroupPending(elem, index) {
     const pending = getGroupPending(elem);
 
@@ -109,17 +158,33 @@ function popGroupPending(elem, index) {
     elem.dataset["settingsGroupPending"] = pending.join(",");
 }
 
+/**
+ * @param {HTMLElement} elem
+ */
 function isGroupElement(elem) {
     return elem.dataset["settingsGroupElement"] !== undefined;
 }
 
+/**
+ * @param {HTMLElement} elem
+ */
 function isIgnoredElement(elem) {
     return elem.dataset["settingsIngore"] !== undefined;
 }
 
-// to 'instantiate' a new element, we must explicitly set 'target' keys in kvs
-// notice that the 'row' creation *should* be handled by the group-specific
-// event listener, we already expect the dom element to exist at this point
+/**
+ * @param {HTMLElement} elem
+ */
+function isInputOrSelect(elem) {
+    return (elem instanceof HTMLInputElement) || (elem instanceof HTMLSelectElement);
+}
+
+/**
+ * to 'instantiate' a new element, we must explicitly set 'target' keys in kvs
+ * notice that the 'row' creation *should* be handled by the group-specific
+ * event listener, we already expect the dom element to exist at this point
+ * @param {Event} event
+ */
 function onGroupSettingsEventAdd(event) {
     const group = event.target;
     const index = group.children.length - 1;
@@ -127,6 +192,7 @@ function onGroupSettingsEventAdd(event) {
     addGroupPending(group, index);
 
     for (const target of settingsTargets(group)) {
+        /** @type {HTMLElement | null} */
         const elem = last.querySelector(`[name='${target}']`);
         if (elem) {
             setChangedElement(elem);
@@ -134,12 +200,18 @@ function onGroupSettingsEventAdd(event) {
     }
 }
 
-// removing the element means we need to notify the kvs about the updated keys
-// in case it's the last row, just remove those keys from the store
-// in case we are in the middle, make sure to handle difference update
-// in case change was 'ephemeral' (i.e. from the previous add that was not saved), do nothing
+/**
+ * removing the element means we need to notify the kvs about the updated keys
+ * in case it's the last row, just remove those keys from the store
+ * in case we are in the middle, make sure to handle difference update
+ * in case change was 'ephemeral' (i.e. from the previous add that was not saved), do nothing
+ * @param {Event} event
+ */
 function onGroupSettingsEventDel(event) {
     const group = event.currentTarget;
+    if (!(group instanceof HTMLElement)) {
+        return;
+    }
 
     const elems = Array.from(group.children);
     const shiftFrom = elems.indexOf(group);
@@ -174,6 +246,10 @@ function onGroupSettingsEventDel(event) {
 // 'button-add-settings-group' will trigger update on the specified 'data-settings-group' element id, which
 // needs to have 'settings-group-add' event handler attached to it.
 
+/**
+ * @param {Event} event
+ * @returns {boolean}
+ */
 function groupSettingsCheckMax(event) {
     const max = event.target.dataset["settingsMax"];
     const val = 1 + event.target.children.length;
@@ -186,6 +262,10 @@ function groupSettingsCheckMax(event) {
     return true;
 }
 
+/**
+ * @param {string} elementId
+ * @param {EventListener} listener
+ */
 export function groupSettingsOnAdd(elementId, listener) {
     document.getElementById(elementId)
         .addEventListener("settings-group-add", (event) => {
@@ -199,6 +279,9 @@ export function groupSettingsOnAdd(elementId, listener) {
         });
 }
 
+/**
+ * @param {Event} event
+ */
 export function onGroupSettingsDel(event) {
     let target = event.target;
     let parent = target.parentElement;
@@ -212,28 +295,34 @@ export function onGroupSettingsDel(event) {
         new CustomEvent("settings-group-del", {bubbles: true}));
 }
 
-// handle addition to the group via the button
-// (notice that since we still use the dataset for the elements, hyphens are just capitalized)
+/**
+ * handle addition to the group using the 'add' button
+ * @param {Event} event
+ */
 function groupSettingsAdd(event) {
     const prefix = "settingsGroupDetail";
     const elem = event.target;
 
-    let eventInit = {detail: null};
-    for (let key of Object.keys(elem.dataset)) {
+    /** @type {{detail: {[k: string]: string}}} */
+    let eventInit = {detail: {}};
+
+    for (let [key, value] of Object.entries(elem.dataset)) {
         if (!key.startsWith(prefix)) {
-            continue
+            continue;
         }
-        if (eventInit.detail === null) {
-            eventInit.detail = {};
+
+        if (!value) {
+            continue;
         }
 
         let eventKey = key.replace(prefix, "");
         eventKey = eventKey[0].toLowerCase() + eventKey.slice(1);
-        eventInit.detail[eventKey] = elem.dataset[key];
+
+        eventInit.detail[eventKey] = value;
     }
 
-    const group = document.getElementById(elem.dataset["settingsGroup"]);
-    group.dispatchEvent(new CustomEvent("settings-group-add", eventInit));
+    document.getElementById(name)
+        ?.dispatchEvent(new CustomEvent("settings-group-add", eventInit));
 }
 
 export function getData(forms, options) {
@@ -242,6 +331,37 @@ export function getData(forms, options) {
         options = {};
     }
 
+    return out;
+}
+
+/**
+ * besides gathering the data, func is expected to also provide
+ * - del: 'cleanup' keys, usually from setting groups that marked certain keys for deletion
+ * - set: kvs only for 'changed' keys
+ * @typedef {{cleanup?: boolean, changed?: boolean}} GetDataOptions
+ */
+
+/**
+ * kvs for the device settings storage
+ * @typedef {string | number} DataValue
+ * @typedef {{[k: string]: DataValue}} SetRequest
+ */
+
+/**
+ * specific 'key' string to remove from the device settings storage
+ * @typedef {string} DelRequest
+ */
+
+/**
+ * usually, settings request is sent as a single object
+ * @typedef {{set: SetRequest, del: DelRequest[]}} DataRequest
+ */
+
+/**
+ * populates two sets of data, ones that had been changed and ones that stayed the same
+ * @param {HTMLFormElement[]} forms
+ * @param {GetDataOptions} options
+ */
     const data = {};
     const changed_data = [];
     if (options.cleanup === undefined) {
@@ -333,46 +453,105 @@ export function getData(forms, options) {
 // - terminal input, which is implemented with an input field. it is attributed with `action="none"`, so settings handler never treats it as 'changed'
 // - initial setup. it is shown programatically, but is still available from the global list of forms
 
-export function getDataForElement(element) {
-    switch (element.tagName) {
-    case "INPUT":
-        switch (element.type) {
-        case "radio":
-            if (element.checked) {
-                return element.value;
-            }
-            return null;
+/** @typedef {boolean | number | string | null} ElementValue */
+
+/**
+ * @param {InputOrSelect} elem
+ * @returns {ElementValue}
+ */
+export function getDataForElement(elem) {
+    if (elem instanceof HTMLInputElement) {
+        switch (elem.type) {
         case "checkbox":
-            return element.checked ? 1 : 0;
-        case "number":
+            return elem.checked;
+
+        case "radio":
+            if (elem.checked) {
+                return elem.value;
+            }
+
+            return null;
+
         case "text":
         case "password":
         case "hidden":
+            return elem.value;
+
+        case "number":
         case "range":
-            // notice that we set directly to storage, thus strings are just fine
-            return element.value;
+            return !isNaN(elem.valueAsNumber)
+                ? elem.valueAsNumber : null;
+
         }
-        break;
-    case "SELECT":
-        if (element.multiple) {
-            return bitsetFromSelectedValues(element);
-        } else if (element.selectedIndex >= 0) {
-            return element.options[element.selectedIndex].value;
+    } else if (elem instanceof HTMLSelectElement) {
+        if (elem.multiple) {
+            return bitsetForSelectElement(elem);
+        } else if (elem.selectedIndex >= 0) {
+            const option = elem.options[elem.selectedIndex];
+            if (option.disabled) {
+                return null;
+            }
+
+            return option.value;
         }
     }
 
     return null;
 }
 
+/**
+ * @param {InputOrSelect} elem
+ * @returns {ElementValue}
+ */
+function getOriginalForElement(elem) {
+    const original = elem.dataset["original"];
+    if (original === undefined) {
+        return null;
+    }
+
+    if (elem instanceof HTMLInputElement) {
+        switch (elem.type) {
+        case "radio":
+        case "text":
+        case "password":
+        case "hidden":
+            return original;
+
+        case "checkbox":
+            return stringToBoolean(original);
+
+        case "number":
+        case "range":
+            return parseInt(original);
+
+        }
+    } else if (elem instanceof HTMLSelectElement) {
+        if (elem.multiple) {
+            return bitsetFromSelectedValues(original.split(","));
+        } else {
+            return original;
+        }
+    }
+
+    return null;
+}
 
 function resetSettingsGroup() {
     const elems = document.getElementsByClassName("settings-group");
     for (let elem of elems) {
+        if (!(elem instanceof HTMLElement)) {
+            continue;
+        }
+
         resetChangedElement(elem);
         resetGroupPending(elem);
     }
 }
 
+/**
+ * @param {HTMLElement} elem
+ * @returns {string[]}
+ */
 function settingsTargets(elem) {
     let targets = elem.dataset["settingsTarget"];
     if (!targets) {
@@ -381,14 +560,25 @@ function settingsTargets(elem) {
 
     return targets.split(" ");
 }
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
 function stringToBoolean(value) {
-    return (value === "1")
-        || (value === "y")
-        || (value === "yes")
-        || (value === "true")
-        || (value === "on");
+    return [
+        "1",
+        "y",
+        "yes",
+        "true",
+        "on",
+    ].includes(value.toLowerCase());
 }
 
+/**
+ * @param {boolean} value
+ * @returns {string}
+ */
 function booleanToString(value) {
     return value ? "true" : "false";
 }
@@ -397,6 +587,10 @@ function booleanToString(value) {
 // For example 0b101 is translated to ["0", "2"], or 0b1111 is translated to ["0", "1", "2", "3"]
 // Right now only `hbReport` uses such format, but it is not yet clear how such select element should behave when value is not an integer
 
+/**
+ * @param {number} bitset
+ * @returns {string[]}
+ */
 function bitsetToSelectedValues(bitset) {
     let values = [];
     for (let index = 0; index < 31; ++index) {
@@ -408,15 +602,36 @@ function bitsetToSelectedValues(bitset) {
     return values;
 }
 
-function bitsetFromSelectedValues(select) {
+/**
+ * @param {string[]} values
+ * @returns {number}
+ */
+function bitsetFromSelectedValues(values) {
     let result = 0;
-    for (let option of select.selectedOptions) {
-        result |= 1 << parseInt(option.value);
+    for (let value of values) {
+        result |= 1 << parseInt(value);
     }
 
     return result;
 }
 
+/**
+ * @param {HTMLSelectElement} select
+ * @returns {number}
+ */
+function bitsetForSelectElement(select) {
+    let values = [];
+    for (let option of select.selectedOptions) {
+        values.push(option.value);
+    }
+
+    return bitsetFromSelectedValues(values);
+}
+
+/**
+ * @param {HTMLInputElement} input
+ * @param {ElementValue} value
+ */
 export function setInputValue(input, value) {
     switch (input.type) {
     case "radio":
@@ -431,11 +646,17 @@ export function setInputValue(input, value) {
     case "text":
     case "password":
     case "number":
-        input.value = value;
+        if (value !== null) {
+            input.value = value.toString();
+        }
         break;
     }
 }
 
+/**
+ * @param {HTMLSpanElement} span
+ * @param {ElementValue} value
+ */
 export function setSpanValue(span, value) {
     if (Array.isArray(value)) {
         value.forEach((text) => {
@@ -446,6 +667,7 @@ export function setSpanValue(span, value) {
         if (typeof(value) === "string") {
             value = span.dataset[`value${value.toUpperCase()}`] || value;
         }
+
         let content = "";
         if (span.attributes.pre) {
             content += span.attributes.pre.value;
@@ -458,10 +680,23 @@ export function setSpanValue(span, value) {
     }
 }
 
+/**
+ * @param {HTMLSelectElement} select
+ * @param {ElementValue} value
+ */
 export function setSelectValue(select, value) {
-    const values = select.multiple
-        ? bitsetToSelectedValues(value)
-        : [value.toString()];
+    switch (typeof value) {
+    case "string":
+    case "number":
+        break;
+
+    default:
+        return;
+    }
+
+    const values = (typeof value === "number" && select.multiple)
+            ? bitsetToSelectedValues(value)
+            : [value.toString()];
 
     Array.from(select.options)
         .filter((option) => values.includes(option.value))
@@ -472,33 +707,42 @@ export function setSelectValue(select, value) {
     select.dataset["original"] = values.join(",");
 }
 
+/**
+ * @param {Document | HTMLElement} node
+ * @param {InputOrSelect[]} elems
+ */
 export function setOriginalsFromValuesForNode(node, elems) {
     if (elems === undefined) {
-        elems = [...node.querySelectorAll("input,select")];
+        elems = [.../** @type {NodeListOf<InputOrSelect>} */(node.querySelectorAll("input,select"))];
     }
 
     for (let elem of elems) {
-        switch (elem.tagName) {
-        case "INPUT":
+        if (elem instanceof HTMLInputElement) {
             if (elem.type === "checkbox") {
                 elem.dataset["original"] = booleanToString(elem.checked);
             } else {
                 elem.dataset["original"] = elem.value;
             }
-            break;
-        case "SELECT":
+        } else if (elem instanceof HTMLSelectElement) {
             elem.dataset["original"] = stringifySelectedValues(elem);
-            break;
         }
+
         resetChangedElement(elem);
     }
 }
 
+/**
+ * @param {InputOrSelect[]} elems
+ */
 export function setOriginalsFromValues(elems) {
     setOriginalsFromValuesForNode(document, elems);
 }
 
-// automatically generate <select> options for know entities
+ /**
+  * automatically generate <select> options for know entities
+  * @typedef {{id: number, name: string}} EnumerableEntry
+  * @type {{[k: string]: EnumerableEntry[]}}
+  */
 const Enumerable = {};
 
 // <select> initialization from simple {id: ..., name: ...} that map as <option> value=... and textContent
@@ -506,15 +750,31 @@ const Enumerable = {};
 //
 // Notice that <select multiple> input and output format is u32 number, but the 'original' string is comma-separated <option> value=... attributes
 
+/**
+ * @typedef {{id: number, name: string}} SelectValue
+ *
+ * @param {HTMLSelectElement} select
+ * @param {SelectValue[]} values
+ */
 export function initSelect(select, values) {
     for (let value of values) {
         let option = document.createElement("option");
-        option.setAttribute("value", value.id);
+        option.setAttribute("value", value.id.toString());
         option.textContent = value.name;
         select.appendChild(option);
     }
 }
 
+/**
+ * @callback EnumerableCallback
+ * @param {HTMLSelectElement} select
+ * @param {EnumerableEntry[]} enumerables
+ */
+
+/**
+ * @param {HTMLSelectElement} select
+ * @param {EnumerableCallback} callback
+ */
 export function initEnumerableSelect(select, callback) {
     for (let className of select.classList) {
         const prefix = "enumerable-";
@@ -528,36 +788,56 @@ export function initEnumerableSelect(select, callback) {
     }
 }
 
+/**
+ * @param {string} name
+ */
 function refreshEnumerableSelect(name) {
     const selector = (name !== undefined)
         ? `select.enumerable.enumerable-${name}`
         : "select.enumerable";
 
     for (let select of document.querySelectorAll(selector)) {
+        if (!(select instanceof HTMLSelectElement)) {
+            break;
+        }
+
         initEnumerableSelect(select, (_, enumerable) => {
-            while (select.childElementCount) {
+            while (select.childElementCount && select.firstElementChild) {
                 select.removeChild(select.firstElementChild);
             }
 
             initSelect(select, enumerable);
 
             const original = select.dataset["original"];
-            if (typeof original === "string" && original.length) {
+            if (original) {
                 setSelectValue(select, original);
             }
         });
     }
 }
 
+/**
+ * @param {string} name
+ * @returns {EnumerableEntry[]}
+ */
 export function getEnumerables(name) {
     return Enumerable[name];
 }
 
+/**
+ * @param {string} name
+ * @param {EnumerableEntry[]} enumerables
+ */
 export function addEnumerables(name, enumerables) {
     Enumerable[name] = enumerables;
     refreshEnumerableSelect(name);
 }
 
+/**
+ * @param {string} name
+ * @param {string} prettyName
+ * @param {number} count
+ */
 export function addSimpleEnumerables(name, prettyName, count) {
     if (count) {
         let enumerables = [];
@@ -572,9 +852,48 @@ export function addSimpleEnumerables(name, prettyName, count) {
 // track <input> values, count total number of changes and their side-effects / needed actions
 class SettingsBase {
     constructor() {
-        this.counters = {};
-        this.resetCounters();
+        this.counters = {
+            changed: 0,
+            reboot: 0,
+            reconnect: 0,
+            reload: 0,
+        };
         this.saved = false;
+    }
+
+    /**
+     * @param {number} count
+     * @param {string | undefined} action
+     */
+    countFor(count, action) {
+        this.counters.changed += count;
+        if (typeof action === "string") {
+            switch (action) {
+            case "reboot":
+            case "reload":
+            case "reconnect":
+                this.counters[action] += count;
+                break;
+            }
+        }
+    }
+
+    /**
+     * @param {string | undefined} action
+     */
+    increment(action) {
+        this.countFor(1, action);
+    }
+
+    /**
+     * @param {string | undefined} action
+     */
+    decrement(action) {
+        this.countFor(-1, action);
+    }
+
+    resetChanged() {
+        this.counters.changed = 0;
     }
 
     resetCounters() {
@@ -585,8 +904,12 @@ class SettingsBase {
     }
 }
 
-// Handle plain kv pairs when they are already on the page, and don't need special template handlers
-// Notice that <span> uses a custom data attribute data-key=..., instead of name=...
+/**
+ * Handle plain kv pairs when they are already on the page, and don't need special template handlers
+ * Notice that <span> uses a custom data attribute data-key=..., instead of name=...
+ * @param {string} key
+ * @param {ElementValue} value
+ */
 export function initGenericKeyValueElement(key, value) {
     for (const span of document.querySelectorAll(`span[data-key='${key}']`)) {
         setSpanValue(span, value);
@@ -594,15 +917,12 @@ export function initGenericKeyValueElement(key, value) {
 
     const inputs = [];
     for (const elem of document.querySelectorAll(`[name='${key}'`)) {
-        switch (elem.tagName) {
-        case "INPUT":
+        if (elem instanceof HTMLInputElement) {
             setInputValue(elem, value);
             inputs.push(elem);
-            break;
-        case "SELECT":
+        } else if (elem instanceof HTMLSelectElement) {
             setSelectValue(elem, value);
             inputs.push(elem);
-            break;
         }
     }
 
@@ -611,30 +931,29 @@ export function initGenericKeyValueElement(key, value) {
 
 const Settings = new SettingsBase();
 
+/**
+ * @param {Event} event
+ */
 export function onElementChange(event) {
-    let action = event.target.dataset["action"];
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
+
+    if (!isInputOrSelect(target)) {
+        return;
+    }
+
+    const action = target.dataset["action"];
     if ("none" === action) {
         return;
     }
 
-    let originalValue = event.target.dataset["original"];
-    let newValue;
+    const different = 
+        getOriginalForElement(target) !== getDataForElement(target);
 
-    if ((event.target.tagName === "INPUT") && (event.target.type === "checkbox")) {
-        originalValue = stringToBoolean(originalValue);
-        newValue = event.target.checked;
-    } else if (event.target.tagName === "SELECT") {
-        newValue = stringifySelectedValues(event.target);
-    } else {
-        newValue = event.target.value;
-    }
-
-    if (typeof originalValue === "undefined") {
-        return;
-    }
-
-    let changed = isChangedElement(event.target);
-    if (newValue !== originalValue) {
+    const changed = isChangedElement(target);
+    if (different) {
         if (!changed) {
             ++Settings.counters.changed;
             if (action in Settings.counters) {
@@ -650,13 +969,28 @@ export function onElementChange(event) {
                 --Settings.counters[action];
             }
         }
-        resetChangedElement(event.target);
+        resetChangedElement(target);
         greyoutSave();
     }
 }
 
+/**
+ * @typedef {function(string, any): void} KeyValueListener
+ */
+
+/**
+ * @typedef {{[k: string]: KeyValueListener}} KeyValueListeners
+ */
+
+/**
+ * @type {{[k: string]: KeyValueListener[]}}
+ */
 const __variable_listeners = {};
 
+/**
+ * @param {string} key
+ * @param {KeyValueListener} func
+ */
 export function listenVariables(key, func) {
     if (__variable_listeners[key] === undefined) {
         __variable_listeners[key] = [];
@@ -665,12 +999,19 @@ export function listenVariables(key, func) {
     __variable_listeners[key].push(func);
 }
 
+/**
+ * @param {KeyValueListeners} listeners
+ */
 export function variableListeners(listeners) {
     for (const [key, listener] of Object.entries(listeners)) {
         listenVariables(key, listener);
     }
 }
 
+/**
+ * @param {string} key
+ * @param {any} value
+ */
 export function updateKeyValue(key, value) {
     const listeners = __variable_listeners[key];
     if (listeners !== undefined) {
@@ -684,26 +1025,26 @@ export function updateKeyValue(key, value) {
     }
 }
 
-function onSaved(value) {
-    Settings.saved = value;
-}
-
 function greyoutSave() {
     const elems = document.querySelectorAll(".button-save");
     for (let elem of elems) {
-        elem.style.removeProperty("--save-background");
+        if (elem instanceof HTMLElement) {
+            elem.style.removeProperty("--save-background");
+        }
     }
 }
 
 function greenifySave() {
     const elems = document.querySelectorAll(".button-save");
     for (let elem of elems) {
-        elem.style.setProperty("--save-background", "rgb(0, 192, 0)");
+        if (elem instanceof HTMLElement) {
+            elem.style.setProperty("--save-background", "rgb(0, 192, 0)");
+        }
     }
 }
 
 function resetOriginals() {
-    setOriginalsFromValues();
+    setOriginalsFromValues([]);
     resetSettingsGroup();
 
     Settings.resetCounters();
@@ -711,7 +1052,7 @@ function resetOriginals() {
 }
 
 function afterSaved() {
-    var response;
+    let response = false;
 
     if (Settings.counters.reboot > 0) {
         response = window.confirm("You have to reboot the board for the changes to take effect, do you want to do it now?");
@@ -742,41 +1083,49 @@ function waitForSaved(){
     }
 }
 
+/** @param {any} settings */
 export function applySettings(settings) {
     send(JSON.stringify({settings}));
 }
 
 export function applySettingsFromAllForms() {
-    // Since we have 2-page config, make sure we select the active one
-    let forms = document.getElementsByClassName("form-settings");
+    const elems = /** @type {NodeListOf<HTMLFormElement>} */(document.querySelectorAll("form.form-settings"));
+
+    const forms = Array.from(elems);
     if (validateForms(forms)) {
         applySettings(getData(forms));
-        Settings.counters.changed = 0;
+        Settings.resetChanged();
         waitForSaved();
     }
 
     return false;
 }
 
+/** @param {Event} event */
 function resetToFactoryDefaults(event) {
     event.preventDefault();
 
-    let response = window.confirm("Are you sure you want to erase all settings from the device?");
-    if (response) {
+    if (window.confirm("Are you sure you want to erase all settings from the device?")) {
         sendAction("factory_reset");
     }
 }
 
+/** @param {Event} event */
 function handleSettingsFile(event) {
     event.preventDefault();
 
-    const inputFiles = event.target.files;
-    if (typeof inputFiles === "undefined" || inputFiles.length === 0) {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+        return;
+    }
+
+    const inputFiles = target.files;
+    if (!inputFiles || inputFiles.length === 0) {
         return false;
     }
 
     const inputFile = inputFiles[0];
-    event.target.value = "";
+    target.value = "";
 
     if (!window.confirm("Previous settings will be overwritten. Are you sure you want to restore from this file?")) {
         return false;
@@ -794,18 +1143,21 @@ function handleSettingsFile(event) {
     reader.readAsText(inputFile);
 }
 
+/** @returns {boolean} */
 export function pendingChanges() {
     return Settings.counters.changed > 0;
 }
 
+/** @returns {KeyValueListeners} */
 function listeners() {
     return {
         "saved": (_, value) => {
-            onSaved(value);
+            Settings.saved = value;
         },
     };
 }
 
+/** @param {{[k: string]: any}} kvs */
 export function updateVariables(kvs) {
     Object.entries(kvs)
         .forEach(([key, value]) => {
@@ -817,28 +1169,36 @@ export function init() {
     variableListeners(listeners());
 
     document.getElementById("uploader")
-        .addEventListener("change", handleSettingsFile);
+        ?.addEventListener("change", handleSettingsFile);
 
     document.querySelector(".button-save")
-        .addEventListener("click", (event) => {
+        ?.addEventListener("click", (event) => {
             event.preventDefault();
             applySettingsFromAllForms();
         });
 
     document.querySelector(".button-settings-backup")
-        .addEventListener("click", (event) => {
+        ?.addEventListener("click", (event) => {
             event.preventDefault();
+
+            const config = configUrl();
+            if (!config) {
+                return;
+            }
+
             const elem = document.getElementById("downloader");
-            elem.href = configUrl().href;
-            elem.click();
+            if (elem instanceof HTMLAnchorElement) {
+                elem.href = config.href;
+                elem.click();
+            }
         });
 
     document.querySelector(".button-settings-restore")
-        .addEventListener("click", () => {
-            document.getElementById("uploader").click();
+        ?.addEventListener("click", () => {
+            document.getElementById("uploader")?.click();
         });
     document.querySelector(".button-settings-factory")
-        .addEventListener("click", resetToFactoryDefaults);
+        ?.addEventListener("click", resetToFactoryDefaults);
 
     document.querySelectorAll(".button-add-settings-group")
         .forEach((elem) => {
