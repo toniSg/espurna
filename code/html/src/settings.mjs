@@ -320,29 +320,18 @@ export function onGroupSettingsDel(event) {
  * @param {Event} event
  */
 function groupSettingsAdd(event) {
-    const prefix = "settingsGroupDetail";
     const elem = event.target;
+    if (!(elem instanceof HTMLElement)) {
+        return;
+    }
 
-    /** @type {{detail: {[k: string]: string}}} */
-    let eventInit = {detail: {}};
-
-    for (let [key, value] of Object.entries(elem.dataset)) {
-        if (!key.startsWith(prefix)) {
-            continue;
-        }
-
-        if (!value) {
-            continue;
-        }
-
-        let eventKey = key.replace(prefix, "");
-        eventKey = eventKey[0].toLowerCase() + eventKey.slice(1);
-
-        eventInit.detail[eventKey] = value;
+    const name = elem.dataset["settingsGroup"];
+    if (!name) {
+        return;
     }
 
     document.getElementById(name)
-        ?.dispatchEvent(new CustomEvent("settings-group-add", eventInit));
+        ?.dispatchEvent(new CustomEvent("settings-group-add"));
 }
 
 export function getData(forms, options) {
