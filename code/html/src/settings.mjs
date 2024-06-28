@@ -334,10 +334,29 @@ function groupSettingsAdd(event) {
         ?.dispatchEvent(new CustomEvent("settings-group-add"));
 }
 
-export function getData(forms, options) {
-    // Populate two sets of data, ones that had been changed and ones that stayed the same
-    if (options === undefined) {
-        options = {};
+/**
+ * @param {HTMLElement} container
+ * @returns {string[]} - key# for each node that needs removal
+ */
+function groupSettingsCleanup(container) {
+    /** @type {string[]} */
+    const out = [];
+
+    for (let elem of container.getElementsByClassName("settings-group")) {
+        if (!(elem instanceof HTMLElement)) {
+            continue;
+        }
+
+        for (let pair of getGroupPending(elem)) {
+            const [action, index] = pair.split(":");
+            if (action === "del") {
+                const keysRaw = elem.dataset["settingsSchema"]
+                    || elem.dataset["settingsTarget"];
+                (keysRaw ?? "").split(" ").forEach((key) => {
+                    out.push(`${key}${index}`);
+                });
+            }
+        }
     }
 
     return out;
@@ -346,8 +365,8 @@ export function getData(forms, options) {
 /**
  * besides gathering the data, func is expected to also provide
  * - del: 'cleanup' keys, usually from setting groups that marked certain keys for deletion
- * - set: kvs only for 'changed' keys
- * @typedef {{cleanup?: boolean, changed?: boolean}} GetDataOptions
+ * - set: kvs only for 'changed' keys, or everything available
+ * @typedef {{cleanup?: boolean, assumeChanged?: boolean}} GetDataOptions
  */
 
 /**
@@ -371,24 +390,30 @@ export function getData(forms, options) {
  * @param {HTMLFormElement[]} forms
  * @param {GetDataOptions} options
  */
+export function getData(forms, {cleanup = true, assumeChanged = false} = {}) {
+    /** @type {{[k: string]: DataValue}} */
     const data = {};
+
+    /** @type {string[]} */
     const changed_data = [];
-    if (options.cleanup === undefined) {
-        options.cleanup = true;
-    }
 
-    if (options.changed === undefined) {
-        options.changed = true;
-    }
-
+    /** @type {{[k: string]: number}} */
     const group_counter = {};
+
+    /** @type DataRequest */
+    const out = {
+        set: {
+        },
+        del: [
+        ]
+    };
 
     // TODO: <input type="radio"> can be found as both individual elements and as a `RadioNodeList` view.
     // matching will extract the specific radio element, but will ignore the list b/c it has no tagName
     // TODO: actually use type="radio" in the WebUI to check whether this works
     for (let form of forms) {
         for (let elem of form.elements) {
-            if ((elem.tagName !== "SELECT") && (elem.tagName !== "INPUT")) {
+            if (!(elem instanceof HTMLInputElement) && !(elem instanceof HTMLSelectElement)) {
                 continue;
             }
 
@@ -396,11 +421,16 @@ export function getData(forms, options) {
                 continue;
             }
 
-            const name = elem.dataset.settingsRealName || elem.name;
-            if (name === undefined) {
+            const name = elem.dataset["settingsRealName"] || elem.name;
+            if (!name) {
                 continue;
             }
 
+            // explicitly attributed, but *could* be determined implicitly by `form.elements[elem.name]` or `FormData::getAll(elem.name)` returing a list
+            // - https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/elements
+            // - https://developer.mozilla.org/en-US/docs/Web/API/FormData/getAll
+            // ts-lint would trigger false positive, though (at least with current version of lib-dom)
+            // - https://github.com/microsoft/TypeScript-DOM-lib-generator/issues/1009
             const group_element = isGroupElement(elem);
             const group_index = group_counter[name] || 0;
             const group_name = `${name}${group_index}`;
@@ -411,48 +441,35 @@ export function getData(forms, options) {
             const value = getDataForElement(elem);
             if (null !== value) {
                 const elem_indexed = changed_data.indexOf(name) >= 0;
-                if ((isChangedElement(elem) || !options.changed) && !elem_indexed) {
+                if ((isChangedElement(elem) || assumeChanged) && !elem_indexed) {
                     changed_data.push(group_element ? group_name : name);
                 }
 
-                data[group_element ? group_name : name] = value;
+                const data_name = group_element
+                    ? group_name : name;
+
+                const data_value = (typeof value === "boolean")
+                    ? (value ? 1 : 0) : value;
+
+                data[data_name] = data_value;
             }
+        }
+
+        // Make sure to remove dynamic group entries from the kvs
+        // Only group keys can be removed atm, so only process .settings-group
+        if (cleanup) {
+            out.del.push(...groupSettingsCleanup(form));
         }
     }
 
     // Finally, filter out only fields that *must* be assigned.
-    const resulting_data = {
-        set: {
-        },
-        del: [
-        ]
-    };
-
-    for (const name in data) {
-        if (!options.changed || (changed_data.indexOf(name) >= 0)) {
-            resulting_data.set[name] = data[name];
+    for (const name of Object.keys(data)) {
+        if (assumeChanged || (changed_data.indexOf(name) >= 0)) {
+            out.set[name] = data[name];
         }
     }
 
-    // Make sure to remove dynamic group entries from the kvs
-    // Only group keys can be removed atm, so only process .settings-group
-    if (options.cleanup) {
-        for (let elem of document.getElementsByClassName("settings-group")) {
-            for (let pair of getGroupPending(elem)) {
-                const [action, index] = pair.split(":");
-                if (action === "del") {
-                    const keysRaw = elem.dataset["settingsSchema"]
-                        || elem.dataset["settingsTarget"];
-                    const keys = !keysRaw ? [] : keysRaw.split(" ");
-                    keys.forEach((key) => {
-                        resulting_data.del.push(`${key}${index}`);
-                    });
-                }
-            }
-        }
-    }
-
-    return resulting_data;
+    return out;
 }
 
 // TODO: <input type="radio"> is a special beast, since the actual value is one of 'checked' elements with the same name=... attribute.

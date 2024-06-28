@@ -1,13 +1,5 @@
 /// <reference path="index.build.d.mts" />
 
-/**
- * @typedef {function(string, any): void} Listener
- */
-
-/**
- * @typedef {{[k: string]: Listener}} Listeners
- */
-
 import { notifyError } from './errors.mjs';
 window.onerror = notifyError;
 
@@ -230,7 +222,7 @@ function keepTime() {
 }
 
 /**
- * @returns {Listeners}
+ * @returns {import("./settings.mjs").KeyValueListeners}
  */
 function listeners() {
     return {
@@ -292,7 +284,7 @@ function initSetupPassword(form) {
             event.preventDefault();
             const forms = [form];
             if (validateFormsPasswords(forms, true)) {
-                applySettings(getData(forms, true));
+                applySettings(getData(forms, {cleanup: true}));
             }
         });
     document.querySelector(".button-generate-password")
