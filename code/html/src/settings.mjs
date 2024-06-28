@@ -169,7 +169,7 @@ function isGroupElement(elem) {
  * @param {HTMLElement} elem
  */
 function isIgnoredElement(elem) {
-    return elem.dataset["settingsIngore"] !== undefined;
+    return elem.dataset["settingsIgnore"] !== undefined;
 }
 
 /**
