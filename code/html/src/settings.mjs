@@ -187,6 +187,10 @@ function isInputOrSelect(elem) {
  */
 function onGroupSettingsEventAdd(event) {
     const group = event.target;
+    if (!(group instanceof HTMLElement)) {
+        return;
+    }
+
     const index = group.children.length - 1;
     const last = group.children[index];
     addGroupPending(group, index);
@@ -239,7 +243,10 @@ function onGroupSettingsEventDel(event) {
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    event.target.remove();
+
+    if (event.target instanceof HTMLElement) {
+        event.target.remove();
+    }
 }
 
 // 'settings-group' contain elements that represent kv list that is suffixed with an index in raw kvs
@@ -251,11 +258,16 @@ function onGroupSettingsEventDel(event) {
  * @returns {boolean}
  */
 function groupSettingsCheckMax(event) {
-    const max = event.target.dataset["settingsMax"];
-    const val = 1 + event.target.children.length;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+        return false;
+    }
+
+    const max = target.dataset["settingsMax"];
+    const val = 1 + target.children.length;
 
     if ((max !== undefined) && (parseInt(max, 10) < val)) {
-        alert(`Max number of ${event.target.id} has been reached (${val} out of ${max})`);
+        alert(`Max number of ${target.id} has been reached (${val} out of ${max})`);
         return false;
     }
 
@@ -268,25 +280,33 @@ function groupSettingsCheckMax(event) {
  */
 export function groupSettingsOnAdd(elementId, listener) {
     document.getElementById(elementId)
-        .addEventListener("settings-group-add", (event) => {
-            event.stopPropagation();
-            if (!groupSettingsCheckMax(event)) {
-                return;
-            }
+        ?.addEventListener("settings-group-add",
+            (event) => {
+                event.stopPropagation();
+                if (!groupSettingsCheckMax(event)) {
+                    return;
+                }
 
-            listener(event);
-            onGroupSettingsEventAdd(event);
-        });
+                listener(event);
+                onGroupSettingsEventAdd(event);
+            });
 }
 
 /**
  * @param {Event} event
  */
 export function onGroupSettingsDel(event) {
-    let target = event.target;
-    let parent = target.parentElement;
+    let target = /** @type {HTMLElement | null} */(event.target);
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
 
-    while (!parent.classList.contains("settings-group")) {
+    let parent = target.parentElement;
+    if (!(parent instanceof HTMLElement)) {
+        return;
+    }
+
+    while (parent && !parent.classList.contains("settings-group")) {
         target = parent;
         parent = target.parentElement;
     }
@@ -911,7 +931,7 @@ class SettingsBase {
  * @param {ElementValue} value
  */
 export function initGenericKeyValueElement(key, value) {
-    for (const span of document.querySelectorAll(`span[data-key='${key}']`)) {
+    for (const span of /** @type {NodeListOf<HTMLSpanElement>} */(document.querySelectorAll(`span[data-key='${key}']`))) {
         setSpanValue(span, value);
     }
 
@@ -949,25 +969,19 @@ export function onElementChange(event) {
         return;
     }
 
-    const different = 
+    const different =
         getOriginalForElement(target) !== getDataForElement(target);
 
     const changed = isChangedElement(target);
     if (different) {
         if (!changed) {
-            ++Settings.counters.changed;
-            if (action in Settings.counters) {
-                ++Settings.counters[action];
-            }
+            Settings.increment(action);
         }
-        setChangedElement(event.target);
+        setChangedElement(target);
         greenifySave();
     } else {
         if (changed) {
-            --Settings.counters.changed;
-            if (action in Settings.counters) {
-                --Settings.counters[action];
-            }
+            Settings.decrement(action);
         }
         resetChangedElement(target);
         greyoutSave();
@@ -1134,8 +1148,16 @@ function handleSettingsFile(event) {
     const reader = new FileReader();
     reader.onload = function(event) {
         try {
-            var data = JSON.parse(event.target.result);
-            sendAction("restore", data);
+            const data = event.target?.result;
+            if (!data) {
+                throw `${event.target} is missing data payload`;
+            }
+
+            if (data instanceof ArrayBuffer) {
+                throw `invalid payload type`;
+            }
+
+            sendAction("restore", JSON.parse(data));
         } catch (e) {
             notifyError(null, null, 0, 0, e);
         }
