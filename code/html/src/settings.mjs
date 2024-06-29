@@ -479,7 +479,15 @@ export function getData(forms, {cleanup = true, assumeChanged = false} = {}) {
 // - terminal input, which is implemented with an input field. it is attributed with `action="none"`, so settings handler never treats it as 'changed'
 // - initial setup. it is shown programatically, but is still available from the global list of forms
 
-/** @typedef {boolean | number | string | null} ElementValue */
+/**
+ * generic value type to set to or get from an element. usually an editable type, like input or select
+ * @typedef {boolean | number | string | null} ElementValue
+ */
+
+/**
+ * generic value to be set to an element. usually cannot be edited after setting, expected to be updated from the device side
+ * @typedef {ElementValue | ElementValue[]} DisplayValue
+ */
 
 /**
  * @param {InputOrSelect} elem
@@ -674,27 +682,43 @@ export function setInputValue(input, value) {
 /**
  * @param {HTMLSpanElement} span
  * @param {ElementValue} value
+ * @returns {string}
+ */
+function prepareSpanValue(span, value) {
+    value = value ?? "";
+    value = value.toString();
+
+    if (value) {
+        const capitalized =
+            `${value.at(0).toUpperCase()}${value.slice(1)}`;
+        value = span.dataset[`value${capitalized}`] ?? value;
+    }
+
+    const out = [
+        `${span.dataset["pre"] || ""}`,
+        `${value}`,
+        `${span.dataset["post"] || ""}`,
+    ];
+
+    return out.join("");
+}
+
+/**
+ * @param {HTMLSpanElement} span
+ * @param {DisplayValue} value
  */
 export function setSpanValue(span, value) {
     if (Array.isArray(value)) {
-        value.forEach((text) => {
-            setSpanValue(span, text);
-            span.appendChild(document.createElement("br"));
-        });
-    } else {
-        if (typeof value === "string") {
-            value = span.dataset[`value${value.toUpperCase()}`] || value;
-        }
+        /** @type {Node[]} */
+        const nodes = [];
 
-        let content = "";
-        if (span.dataset["pre"]) {
-            content += span.dataset["pre"];
-        }
-        content += value;
-        if (span.dataset["post"]) {
-            content += span.dataset["post"];
-        }
-        span.textContent = content;
+        value.forEach((entry) => {
+            nodes.push(new Text(prepareSpanValue(span, entry)));
+            nodes.push(document.createElement("br"));
+        });
+        span.replaceChildren(...nodes);
+    } else {
+        span.textContent = prepareSpanValue(span, value);
     }
 }
 
@@ -923,16 +947,23 @@ class SettingsBase {
 }
 
 /**
- * Handle plain kv pairs when they are already on the page, and don't need special template handlers
- * Notice that <span> uses a custom data attribute data-key=..., instead of name=...
+ * read-only kv pairs. currently, this is span with a data-key=$key
+ * @param {string} key
+ * @param {DisplayValue} value
+ */
+export function initDisplayKeyValueElement(key, value) {
+    const spans = /** @type {NodeListOf<HTMLSpanElement>} */(document.querySelectorAll(`span[data-key='${key}']`));
+    for (const span of spans) {
+        setSpanValue(span, value);
+    }
+}
+
+/**
+ * handle plain kv pairs when they are already on the page, and don't need special template handlers
  * @param {string} key
  * @param {ElementValue} value
  */
-export function initGenericKeyValueElement(key, value) {
-    for (const span of /** @type {NodeListOf<HTMLSpanElement>} */(document.querySelectorAll(`span[data-key='${key}']`))) {
-        setSpanValue(span, value);
-    }
-
+export function initInputKeyValueElement(key, value) {
     const inputs = [];
     for (const elem of document.querySelectorAll(`[name='${key}'`)) {
         if (elem instanceof HTMLInputElement) {
@@ -1032,9 +1063,12 @@ export function updateKeyValue(key, value) {
         }
     }
 
-    if (typeof value !== "object") {
-        initGenericKeyValueElement(key, value);
+    if (typeof value === "object") {
+        return;
     }
+
+    initDisplayKeyValueElement(key, value);
+    initInputKeyValueElement(key, value);
 }
 
 function greyoutSave() {
