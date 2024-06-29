@@ -695,12 +695,12 @@ export function setSpanValue(span, value) {
         }
 
         let content = "";
-        if (span.attributes.pre) {
-            content += span.attributes.pre.value;
+        if (span.dataset["pre"]) {
+            content += span.dataset["pre"];
         }
         content += value;
-        if (span.attributes.post) {
-            content += span.attributes.post.value;
+        if (span.dataset["post"]) {
+            content += span.dataset["post"];
         }
         span.textContent = content;
     }
