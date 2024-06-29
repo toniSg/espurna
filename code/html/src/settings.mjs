@@ -601,14 +601,6 @@ function stringToBoolean(value) {
     ].includes(value.toLowerCase());
 }
 
-/**
- * @param {boolean} value
- * @returns {string}
- */
-function booleanToString(value) {
-    return value ? "true" : "false";
-}
-
 // When receiving / returning data, <select multiple=true> <option> values are treated as bitset (u32) indexes (i.e. individual bits that are set)
 // For example 0b101 is translated to ["0", "2"], or 0b1111 is translated to ["0", "1", "2", "3"]
 // Right now only `hbReport` uses such format, but it is not yet clear how such select element should behave when value is not an integer
@@ -665,9 +657,9 @@ export function setInputValue(input, value) {
         break;
     case "checkbox":
         input.checked =
-            (typeof(value) === "boolean") ? value :
-            (typeof(value) === "string") ? stringToBoolean(value) :
-            (typeof(value) === "number") ? (value !== 0) : false;
+            (typeof value === "boolean") ? value :
+            (typeof value === "string") ? stringToBoolean(value) :
+            (typeof value === "number") ? (value !== 0) : false;
         break;
     case "text":
     case "password":
@@ -690,7 +682,7 @@ export function setSpanValue(span, value) {
             span.appendChild(document.createElement("br"));
         });
     } else {
-        if (typeof(value) === "string") {
+        if (typeof value === "string") {
             value = span.dataset[`value${value.toUpperCase()}`] || value;
         }
 
@@ -745,7 +737,7 @@ export function setOriginalsFromValuesForNode(node, elems) {
     for (let elem of elems) {
         if (elem instanceof HTMLInputElement) {
             if (elem.type === "checkbox") {
-                elem.dataset["original"] = booleanToString(elem.checked);
+                elem.dataset["original"] = elem.checked.toString();
             } else {
                 elem.dataset["original"] = elem.value;
             }
@@ -1040,7 +1032,7 @@ export function updateKeyValue(key, value) {
         }
     }
 
-    if (typeof(value) !== "object") {
+    if (typeof value !== "object") {
         initGenericKeyValueElement(key, value);
     }
 }
