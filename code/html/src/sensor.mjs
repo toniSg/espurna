@@ -18,7 +18,7 @@ import {
     fromSchema,
     initSelect,
     setChangedElement,
-    setOriginalsFromValuesForNode,
+    setOriginalsFromValues,
     setSelectValue,
 } from './settings.mjs';
 
@@ -146,7 +146,7 @@ function createMagnitudeUnitSelector(id, magnitude) {
 
         initSelect(select, options);
         setSelectValue(select, magnitude.units);
-        setOriginalsFromValuesForNode(line, [select]);
+        setOriginalsFromValues([select]);
 
         const container = document.getElementById("magnitude-units");
         container.parentElement.classList.remove("maybe-hidden");
@@ -178,7 +178,7 @@ function initMagnitudeTextSetting(containerId, id, keySuffix, value) {
     input.id = info.key;
     input.name = input.id;
     input.value = value;
-    setOriginalsFromValuesForNode(template, [input]);
+    setOriginalsFromValues([input]);
 
     const label = template.querySelector("label");
     label.textContent = info.name;

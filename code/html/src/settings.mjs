@@ -174,9 +174,8 @@ function onGroupSettingsEventAdd(event) {
     addGroupPending(group, index);
 
     for (const target of settingsTargets(group)) {
-        /** @type {HTMLElement | null} */
         const elem = last.querySelector(`[name='${target}']`);
-        if (elem) {
+        if (elem instanceof HTMLElement) {
             setChangedElement(elem);
         }
     }
@@ -740,14 +739,9 @@ export function setSelectValue(select, value) {
 }
 
 /**
- * @param {Document | HTMLElement} node
  * @param {InputOrSelect[]} elems
  */
-export function setOriginalsFromValuesForNode(node, elems) {
-    if (elems === undefined) {
-        elems = [.../** @type {NodeListOf<InputOrSelect>} */(node.querySelectorAll("input,select"))];
-    }
-
+export function setOriginalsFromValues(elems) {
     for (let elem of elems) {
         if (elem instanceof HTMLInputElement) {
             if (elem.type === "checkbox") {
@@ -764,10 +758,11 @@ export function setOriginalsFromValuesForNode(node, elems) {
 }
 
 /**
- * @param {InputOrSelect[]} elems
+ * @param {HTMLElement} node
  */
-export function setOriginalsFromValues(elems) {
-    setOriginalsFromValuesForNode(document, elems);
+export function setOriginalsFromValuesForNode(node) {
+    setOriginalsFromValues(
+        Array.from(node.querySelectorAll("input,select")));
 }
 
  /**
@@ -1088,7 +1083,7 @@ export function updateKeyValue(key, value) {
 }
 
 function resetOriginals() {
-    setOriginalsFromValues([]);
+    setOriginalsFromValuesForNode(document.documentElement);
     resetSettingsGroup();
 
     Settings.resetCounters();
