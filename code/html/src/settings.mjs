@@ -744,8 +744,6 @@ export function setSelectValue(select, value) {
         .forEach((option) => {
             option.selected = values.includes(option.value);
         });
-
-    select.dataset["original"] = values.join(",");
 }
 
 /**
