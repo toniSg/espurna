@@ -941,6 +941,22 @@ class SettingsBase {
         this.counters.reconnect = 0;
         this.counters.reload = 0;
     }
+
+    stylizeSave() {
+        const changed = this.counters.changed !== 0;
+        document.querySelectorAll(".button-save")
+            .forEach((elem) => {
+                if (!(elem instanceof HTMLElement)) {
+                    return;
+                }
+
+                if (changed) {
+                    elem.style.setProperty("--save-background", "rgb(0, 192, 0)");
+                } else {
+                    elem.style.removeProperty("--save-background");
+                }
+            });
+    }
 }
 
 /**
@@ -978,6 +994,22 @@ export function initInputKeyValueElement(key, value) {
 const Settings = new SettingsBase();
 
 /**
+ * @param {InputOrSelect} elem
+ * @returns {boolean}
+ */
+export function checkAndSetElementChanged(elem) {
+    const changed = isChangedElement(elem);
+
+    if (getOriginalForElement(elem) !== getDataForElement(elem)) {
+        setChangedElement(elem);
+    } else {
+        resetChangedElement(elem);
+    }
+
+    return changed !== isChangedElement(elem);
+}
+
+/**
  * @param {Event} event
  */
 export function onElementChange(event) {
@@ -995,23 +1027,17 @@ export function onElementChange(event) {
         return;
     }
 
-    const different =
-        getOriginalForElement(target) !== getDataForElement(target);
-
-    const changed = isChangedElement(target);
-    if (different) {
-        if (!changed) {
-            Settings.increment(action);
-        }
-        setChangedElement(target);
-        greenifySave();
-    } else {
-        if (changed) {
-            Settings.decrement(action);
-        }
-        resetChangedElement(target);
-        greyoutSave();
+    if (!checkAndSetElementChanged(target)) {
+        return;
     }
+
+    if (isChangedElement(target)) {
+        Settings.increment(action);
+    } else {
+        Settings.decrement(action);
+    }
+
+    Settings.stylizeSave();
 }
 
 /**
@@ -1068,24 +1094,6 @@ export function updateKeyValue(key, value) {
     initInputKeyValueElement(key, value);
 }
 
-function greyoutSave() {
-    const elems = document.querySelectorAll(".button-save");
-    for (let elem of elems) {
-        if (elem instanceof HTMLElement) {
-            elem.style.removeProperty("--save-background");
-        }
-    }
-}
-
-function greenifySave() {
-    const elems = document.querySelectorAll(".button-save");
-    for (let elem of elems) {
-        if (elem instanceof HTMLElement) {
-            elem.style.setProperty("--save-background", "rgb(0, 192, 0)");
-        }
-    }
-}
-
 function resetOriginals() {
     setOriginalsFromValues([]);
     resetSettingsGroup();
@@ -1115,7 +1123,7 @@ function afterSaved() {
     }
 
     resetOriginals();
-    greyoutSave();
+    Settings.stylizeSave();
 }
 
 function waitForSaved(){
