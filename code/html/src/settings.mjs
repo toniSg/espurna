@@ -758,7 +758,7 @@ export function setOriginalsFromValues(elems) {
 }
 
 /**
- * @param {HTMLElement} node
+ * @param {HTMLElement | DocumentFragment} node
  */
 export function setOriginalsFromValuesForNode(node) {
     setOriginalsFromValues(

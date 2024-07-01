@@ -17,17 +17,28 @@ export function styleVisible(selector, value) {
     return `${selector} { content-visibility: ${value ? "visible": "hidden"}; }`
 }
 
+/**
+ * @param {number} ms
+ */
 export function pageReloadIn(ms) {
     setTimeout(() => {
         window.location.reload();
     }, parseInt(ms, 10));
 }
 
+/**
+ * @param {HTMLElement} container
+ */
 export function moreElem(container) {
-    for (let elem of container.querySelectorAll(".more")) {
-        elem.style.display = (elem.style.display === "")
-            ? "inherit" : "";
-    }
+    container.querySelectorAll(".more")
+        .forEach((elem) => {
+            if (!(elem instanceof HTMLElement)) {
+                return;
+            }
+
+            elem.style.display = (elem.style.display === "")
+                ? "inherit" : "";
+        });
 }
 
 export function toggleMenu(event) {

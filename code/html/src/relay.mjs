@@ -4,13 +4,14 @@ import {
     getEnumerables,
     variableListeners,
 } from './settings.mjs';
+import { addFromTemplate } from './template.mjs';
 
 import { sendAction } from './connection.mjs';
 
 import {
+    loadTemplate,
     loadConfigTemplate,
     mergeTemplate,
-    fillTemplateLineFromCfg,
 } from './template.mjs';
 
 function onToggle(event) {
@@ -21,7 +22,7 @@ function onToggle(event) {
 }
 
 function initToggle(id, cfg) {
-    let line = loadConfigTemplate("relay-control");
+    const line = loadTemplate("relay-control");
 
     let root = line.querySelector("div");
     root.classList.add(`relay-control-${id}`);
@@ -59,10 +60,8 @@ function updateState(data) {
     });
 }
 
-function initConfig(id, cfg) {
-    let line = loadConfigTemplate("relay-config");
-    fillTemplateLineFromCfg(line, id, cfg);
-    mergeTemplate(document.getElementById("relayConfig"), line);
+function addConfigNode(cfg) {
+    addFromTemplate(document.getElementById("relayConfig"), "relay-config", cfg);
 }
 
 function listeners() {
@@ -86,7 +85,7 @@ function listeners() {
                 });
 
                 initToggle(id, cfg);
-                initConfig(id, cfg);
+                addConfigNode(cfg);
             });
 
             addEnumerables("relay", relays);
@@ -104,9 +103,9 @@ export function createNodeList(containerId, values, keyPrefix) {
     }
 
     // TODO: let schema set the settings key
-    const template = loadConfigTemplate("number-input");
+    const fragment = loadConfigTemplate("number-input");
     values.forEach((value, index) => {
-        const line = template.cloneNode(true);
+        const line = fragment.cloneNode(true);
 
         const enumerables = getEnumerables("relay");
         line.querySelector("label").textContent = (enumerables)

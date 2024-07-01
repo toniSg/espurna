@@ -3,32 +3,54 @@
 // (and notice that document.querySelector(...) won't be able to read inside of these)
 
 import {
+    initEnumerableSelect,
+    initSelect,
+    onGroupSettingsDel,
     setInputValue,
     setOriginalsFromValuesForNode,
     setSelectValue,
     setSpanValue,
-    initSelect,
-    initEnumerableSelect,
-    onGroupSettingsDel,
 } from './settings.mjs';
 
 import { moreElem } from './core.mjs';
 
+/**
+ * @param {Event} event
+ */
 function moreParent(event) {
-    moreElem(event.target.parentElement.parentElement);
+    event.preventDefault();
+    event.stopPropagation();
+
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
+
+    const parent = target?.parentElement?.parentElement;
+    if (parent) {
+        moreElem(parent);
+    }
 }
 
 /**
- * @returns {HTMLElement}
+ * @param {string} name
+ * @returns {DocumentFragment}
  */
 export function loadTemplate(name) {
-    let template = document.getElementById(`template-${name}`);
+    const template = /** @type {HTMLTemplateElement} */
+        (document.getElementById(`template-${name}`));
     return document.importNode(template.content, true);
 }
 
-export function loadConfigTemplate(id) {
-    let template = loadTemplate(id);
-    for (let elem of template.querySelectorAll("input,select")) {
+/** @import { InputOrSelect } from './settings.mjs' */
+
+/**
+ * @param {string} name
+ * @returns {DocumentFragment}
+ */
+export function loadConfigTemplate(name) {
+    const template = loadTemplate(name);
+    for (let elem of /** @type {NodeListOf<InputOrSelect>} */(template.querySelectorAll("input,select"))) {
         elem.dataset["settingsGroupElement"] = "true";
     }
 
@@ -40,19 +62,21 @@ export function loadConfigTemplate(id) {
         elem.addEventListener("click", moreParent);
     }
 
-    for (let elem of template.querySelectorAll("select.enumerable")) {
+    for (let elem of /** @type {NodeListOf<HTMLSelectElement>} */(template.querySelectorAll("select.enumerable"))) {
         initEnumerableSelect(elem, initSelect);
     }
 
     return template;
 }
 
+/** @typedef {InputOrSelect | HTMLSpanElement} TemplateLineElement */
+
 /**
- * @param {HTMLElement} line
+ * @param {DocumentFragment} fragment
  * @param {number} id
  * @param {any} cfg
  */
-export function fillTemplateLineFromCfg(line, id, cfg) {
+export function fillTemplateFromCfg(fragment, id, cfg) {
     let local = {"template-id": id};
     if (cfg === undefined) {
         cfg = {};
@@ -61,34 +85,49 @@ export function fillTemplateLineFromCfg(line, id, cfg) {
     Object.assign(local, cfg);
     cfg = local;
 
-    for (let elem of line.querySelectorAll("input,select,span")) {
-        let key = elem.name || elem.dataset.key;
-        if (key && (key in cfg)) {
-            switch (elem.tagName) {
-            case "INPUT":
-                setInputValue(elem, cfg[key]);
-                break;
-            case "SELECT":
-                setSelectValue(elem, cfg[key]);
-                break;
-            case "SPAN":
-                setSpanValue(elem, cfg[key]);
-                break;
-            }
+    for (let elem of /** @type {NodeListOf<TemplateLineElement>} */(fragment.querySelectorAll("input,select,span"))) {
+        const key =
+           ((elem instanceof HTMLInputElement)
+         || (elem instanceof HTMLSelectElement))
+                ? (elem.name) :
+            (elem instanceof HTMLElement)
+                ? elem.dataset["key"]
+                : "";
+
+        if (!key || !cfg[key]) {
+            continue;
+        }
+
+        const value = cfg[key];
+        if (elem instanceof HTMLInputElement) {
+            setInputValue(elem, value);
+        } else if (elem instanceof HTMLSelectElement) {
+            setSelectValue(elem, value);
+        } else if (elem instanceof HTMLSpanElement) {
+            setSpanValue(elem, value);
         }
     }
 
-    setOriginalsFromValuesForNode(line);
+    setOriginalsFromValuesForNode(fragment);
 }
 
+/**
+ * @param {HTMLElement} target
+ * @param {DocumentFragment} template
+ */
 export function mergeTemplate(target, template) {
     for (let child of Array.from(template.children)) {
         target.appendChild(child);
     }
 }
 
-export function addFromTemplate(container, template, cfg) {
-    const line = loadConfigTemplate(template);
-    fillTemplateLineFromCfg(line, container.childElementCount, cfg);
-    mergeTemplate(container, line);
+/**
+ * @param {HTMLElement} container
+ * @param {string} name
+ * @param {any} cfg
+ */
+export function addFromTemplate(container, name, cfg) {
+    const fragment = loadConfigTemplate(name);
+    fillTemplateFromCfg(fragment, container.childElementCount, cfg);
+    mergeTemplate(container, fragment);
 }
