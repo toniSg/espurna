@@ -860,7 +860,7 @@ function refreshEnumerableSelect(name) {
  * @returns {EnumerableEntry[]}
  */
 export function getEnumerables(name) {
-    return Enumerable[name];
+    return Enumerable[name] ?? [];
 }
 
 /**
