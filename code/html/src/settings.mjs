@@ -3,28 +3,6 @@ import { pageReloadIn } from './core.mjs';
 import { send, sendAction, configUrl } from './connection.mjs';
 import { validateForms } from './validate.mjs';
 
-// <select data-original="..."> is read / saved as:
-// - multiple=false -> value string of the selected option
-// - multiple=true -> comma-separated values of all selected options
-//
-// If selectedIndex is -1, it means we never selected anything
-// (TODO: could this actually happen with anything other than empty <select>?)
-
-/**
- * @param {HTMLSelectElement} select
- */
-function stringifySelectedValues(select) {
-    if (select.multiple) {
-        return Array.from(select.selectedOptions)
-            .map(option => option.value)
-            .join(",");
-    } else if (select.selectedIndex >= 0) {
-        return select.options[select.selectedIndex].value;
-    }
-
-    return select.dataset["original"];
-}
-
 /**
  * @param {HTMLElement} elem
  */
@@ -609,6 +587,21 @@ function stringToBoolean(value) {
     ].includes(value.toLowerCase());
 }
 
+/**
+ * @param {HTMLSelectElement} select
+ * @returns {string[]}
+ */
+function selectedValues(select) {
+    if (select.multiple) {
+        return Array.from(select.selectedOptions)
+            .map(option => option.value);
+    } else if (select.selectedIndex >= 0) {
+        return [select.options[select.selectedIndex].value];
+    }
+
+    return [];
+}
+
 // When receiving / returning data, <select multiple=true> <option> values are treated as bitset (u32) indexes (i.e. individual bits that are set)
 // For example 0b101 is translated to ["0", "2"], or 0b1111 is translated to ["0", "1", "2", "3"]
 // Right now only `hbReport` uses such format, but it is not yet clear how such select element should behave when value is not an integer
@@ -646,12 +639,7 @@ function bitsetFromSelectedValues(values) {
  * @returns {number}
  */
 function bitsetForSelectElement(select) {
-    let values = [];
-    for (let option of select.selectedOptions) {
-        values.push(option.value);
-    }
-
-    return bitsetFromSelectedValues(values);
+    return bitsetFromSelectedValues(selectedValues(select))
 }
 
 /**
@@ -727,18 +715,23 @@ export function setSpanValue(span, value) {
  * @param {ElementValue} value
  */
 export function setSelectValue(select, value) {
+    /** @type string[] */
+    const values = [];
+
     switch (typeof value) {
+    case "boolean":
     case "string":
-    case "number":
+        values.push(value.toString());
         break;
 
-    default:
-        return;
+    case "number":
+        if (select.multiple) {
+            values.push(...bitsetToSelectedValues(value));
+        } else {
+            values.push(value.toString());
+        }
+        break;
     }
-
-    const values = (typeof value === "number" && select.multiple)
-            ? bitsetToSelectedValues(value)
-            : [value.toString()];
 
     Array.from(select.options)
         .forEach((option) => {
@@ -763,7 +756,7 @@ export function setOriginalsFromValuesForNode(node, elems) {
                 elem.dataset["original"] = elem.value;
             }
         } else if (elem instanceof HTMLSelectElement) {
-            elem.dataset["original"] = stringifySelectedValues(elem);
+            elem.dataset["original"] = selectedValues(elem).join(",");
         }
 
         resetChangedElement(elem);
