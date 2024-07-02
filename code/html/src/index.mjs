@@ -6,21 +6,18 @@ window.onerror = notifyError;
 import {
     pageReloadIn,
     randomString,
-    showPanel,
+    onPanelTargetClick,
     styleInject,
 } from './core.mjs';
 
 import { validatePassword, validateFormsPasswords } from './validate.mjs';
 
-import {
-    askAndCallAction,
-    askAndCallReboot,
-    askAndCallReconnect,
-} from './question.mjs';
+import { askAndCall } from './question.mjs';
 
 import {
     init as initSettings,
     applySettings,
+    askSaveSettings,
     getData,
     setChangedElement,
     updateVariables,
@@ -29,7 +26,11 @@ import {
 
 import { init as initWiFi } from './wifi.mjs';
 import { init as initGpio } from './gpio.mjs';
-import { init as initConnection, connect } from './connection.mjs';
+import {
+    init as initConnection,
+    connect,
+    sendAction,
+} from './connection.mjs';
 
 import { init as initApi } from './api.mjs';
 import { init as initCurtain } from './curtain.mjs';
@@ -221,8 +222,52 @@ function keepTime() {
     }
 }
 
+/** @import { QuestionWrapper } from './question.mjs' */
+
+/** @type {QuestionWrapper} */
+function askDisconnect(ask) {
+    return ask("Are you sure you want to disconnect from the current WiFi network?");
+}
+
+/** @type {QuestionWrapper} */
+function askReboot(ask) {
+    return ask("Are you sure you want to reboot the device?");
+}
+
+function askAndCallReconnect() {
+    askAndCall([askSaveSettings, askDisconnect], () => {
+        sendAction("reconnect");
+    });
+}
+
+function askAndCallReboot() {
+    askAndCall([askSaveSettings, askReboot], () => {
+        sendAction("reboot");
+    });
+}
+
+/** @param {Event} event */
+function askAndCallSimpleAction(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) {
+        return;
+    }
+
+    /** @type {QuestionWrapper} */
+    const wrapper =
+        (ask) => ask(`Confirm the action: "${target.textContent}"`);
+
+    askAndCall([wrapper], () => {
+        sendAction(target.name);
+    });
+}
+
 /**
- * @returns {import("./settings.mjs").KeyValueListeners}
+ * @import { KeyValueListeners } from './settings.mjs'
+ */
+
+/**
+ * @returns {KeyValueListeners}
  */
 function listeners() {
     return {
@@ -298,17 +343,32 @@ function initSetupPassword(form) {
  * @param {Event} event
  * @returns {any}
  */
-function toggleMenu(event) {
+function onMenuLinkClick(event) {
     event.preventDefault();
-    /** @type {HTMLElement} */(event.target).parentElement?.classList.toggle("active");
+
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
+
+    if (target?.parentElement) {
+        target.parentElement.classList.toggle("active");
+    }
 }
 
 /**
  * @param {Event} event
  */
-function toggleVisiblePassword(event) {
-    const target = /** @type {HTMLSpanElement} */(event.target);
-    const input = /** @type {HTMLInputElement} */(target.previousElementSibling);
+function onPasswordRevealClick(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
+
+    const input = target.previousElementSibling;
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
 
     if (input.type === "password") {
         input.type = "text";
@@ -348,15 +408,15 @@ function init() {
 
     document.querySelectorAll(".password-reveal")
         .forEach((elem) => {
-            elem.addEventListener("click", toggleVisiblePassword);
+            elem.addEventListener("click", onPasswordRevealClick);
         });
 
     // Sidebar menu & buttons
     document.querySelector(".menu-link")
-        ?.addEventListener("click", toggleMenu);
+        ?.addEventListener("click", onMenuLinkClick);
     document.querySelectorAll(".pure-menu-link")
         .forEach((elem) => {
-            elem.addEventListener("click", showPanel);
+            elem.addEventListener("click", onPanelTargetClick);
         });
 
     document.querySelector(".button-reconnect")
@@ -369,7 +429,7 @@ function init() {
     // Generic action sender
     document.querySelectorAll(".button-simple-action")
         .forEach((elem) => {
-            elem.addEventListener("click", askAndCallAction);
+            elem.addEventListener("click", askAndCallSimpleAction);
         });
 
     variableListeners(listeners());

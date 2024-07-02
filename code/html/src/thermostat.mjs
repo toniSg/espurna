@@ -1,4 +1,5 @@
-import { askAndCall, askSaveSettings } from './question.mjs';
+import { askAndCall } from './question.mjs';
+import { askSaveSettings } from './settings.mjs';
 import { sendAction } from './connection.mjs';
 
 function checkTempRange(event) {

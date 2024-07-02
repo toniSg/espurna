@@ -1195,6 +1195,20 @@ export function pendingChanges() {
     return Settings.counters.changed > 0;
 }
 
+/**
+ * TODO https://github.com/microsoft/TypeScript/issues/58969 ? at-import becomes 'unused' for some reason
+ * @typedef {import("./question.mjs").QuestionWrapper} QuestionWrapper
+ */
+
+/** @type {QuestionWrapper} */
+export function askSaveSettings(ask) {
+    if (pendingChanges()) {
+        return ask("There are pending changes to the settings, continue the operation without saving?");
+    }
+
+    return true;
+}
+
 /** @returns {KeyValueListeners} */
 function listeners() {
     return {
@@ -1249,7 +1263,7 @@ export function init() {
 
     document.querySelectorAll(".button-add-settings-group")
         .forEach((elem) => {
-            elem.addEventListener("click", groupSettingsAdd);
+            elem.addEventListener("click", onGroupSettingsAddClick);
         });
 
     // No group handler should be registered after this point, since we depend on the order

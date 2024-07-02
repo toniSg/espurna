@@ -8,7 +8,7 @@ import {
 } from './template.mjs';
 
 import {
-    showPanel,
+    onPanelTargetClick,
     showPanelByName,
     styleInject,
     styleVisible,
@@ -358,7 +358,7 @@ export function init() {
     variableListeners(listeners());
 
     document.querySelector(".button-emon-expected")
-        .addEventListener("click", showPanel);
+        .addEventListener("click", onPanelTargetClick);
     document.querySelector(".button-emon-expected-calculate")
         .addEventListener("click", emonCalculateRatios);
     document.querySelector(".button-emon-expected-apply")
