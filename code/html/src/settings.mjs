@@ -167,17 +167,9 @@ function isInputOrSelect(elem) {
 }
 
 /**
- * to 'instantiate' a new element, we must explicitly set 'target' keys in kvs
- * notice that the 'row' creation *should* be handled by the group-specific
- * event listener, we already expect the dom element to exist at this point
- * @param {Event} event
+ * @param {HTMLElement} group
  */
-function onGroupSettingsEventAdd(event) {
-    const group = event.target;
-    if (!(group instanceof HTMLElement)) {
-        return;
-    }
-
+export function groupSettingsAdd(group) {
     const index = group.children.length - 1;
     const last = group.children[index];
     addGroupPending(group, index);
@@ -191,20 +183,27 @@ function onGroupSettingsEventAdd(event) {
 }
 
 /**
- * removing the element means we need to notify the kvs about the updated keys
- * in case it's the last row, just remove those keys from the store
- * in case we are in the middle, make sure to handle difference update
- * in case change was 'ephemeral' (i.e. from the previous add that was not saved), do nothing
+ * to 'instantiate' a new element, we must explicitly set 'target' keys in kvs
+ * notice that the 'row' creation *should* be handled by the group-specific
+ * event listener, we already expect the dom element to exist at this point
  * @param {Event} event
  */
-function onGroupSettingsEventDel(event) {
-    const group = event.currentTarget;
+function onGroupSettingsEventAdd(event) {
+    const group = event.target;
     if (!(group instanceof HTMLElement)) {
         return;
     }
 
+    groupSettingsAdd(group);
+}
+
+/**
+ * @param {HTMLElement} group
+ * @param {HTMLElement} target
+ */
+export function groupSettingsDel(group, target) {
     const elems = Array.from(group.children);
-    const shiftFrom = elems.indexOf(group);
+    const shiftFrom = elems.indexOf(target);
 
     const info = elems.map(groupElementInfo);
     for (let index = -1; index < info.length; ++index) {
@@ -227,12 +226,31 @@ function onGroupSettingsEventDel(event) {
         popGroupPending(group, elems.length - 1);
     }
 
+    target.remove();
+}
+
+/**
+ * removing the element means we need to notify the kvs about the updated keys
+ * in case it's the last row, just remove those keys from the store
+ * in case we are in the middle, make sure to handle difference update
+ * in case change was 'ephemeral' (i.e. from the previous add that was not saved), do nothing
+ * @param {Event} event
+ */
+function onGroupSettingsEventDel(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    if (event.target instanceof HTMLElement) {
-        event.target.remove();
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+        return;
     }
+
+    const group = event.currentTarget;
+    if (!(group instanceof HTMLElement)) {
+        return;
+    }
+
+    groupSettingsDel(group, target);
 }
 
 // 'settings-group' contain elements that represent kv list that is suffixed with an index in raw kvs
@@ -305,7 +323,7 @@ export function onGroupSettingsDel(event) {
  * handle addition to the group using the 'add' button
  * @param {Event} event
  */
-function groupSettingsAdd(event) {
+function onGroupSettingsAddClick(event) {
     const elem = event.target;
     if (!(elem instanceof HTMLElement)) {
         return;
@@ -431,9 +449,11 @@ export function getData(forms, {cleanup = true, assumeChanged = false} = {}) {
                     changed_data.push(group_element ? group_name : name);
                 }
 
+                // whenever group is involved, make sure its name is used instead
                 const data_name = group_element
                     ? group_name : name;
 
+                // TODO small value optimization, so booleans always take 1 byte in the resulting json
                 const data_value = (typeof value === "boolean")
                     ? (value ? 1 : 0) : value;
 
