@@ -112,10 +112,19 @@ function getGroupPending(elem) {
 /**
  * @param {HTMLElement} elem
  * @param {number} index
+ * @param {string} lhs
+ * @param {string} rhs
  */
-function addGroupPending(elem, index) {
+function modifyGroupPending(elem, index, lhs, rhs) {
     const pending = getGroupPending(elem);
-    pending.push(`set:${index}`);
+
+    const removed = pending.indexOf(`${lhs}:${index}`);
+    if (removed >= 0) {
+        pending.splice(removed, 1);
+    } else {
+        pending.push(`${rhs}:${index}`);
+    }
+
     elem.dataset["settingsGroupPending"] = pending.join(",");
 }
 
@@ -123,17 +132,17 @@ function addGroupPending(elem, index) {
  * @param {HTMLElement} elem
  * @param {number} index
  */
+function addGroupPending(elem, index) {
+    modifyGroupPending(elem, index, "del", "set");
+}
+
+
+/**
+ * @param {HTMLElement} elem
+ * @param {number} index
+ */
 function popGroupPending(elem, index) {
-    const pending = getGroupPending(elem);
-
-    const added = pending.indexOf(`set:${index}`);
-    if (added >= 0) {
-        pending.splice(added, 1);
-    } else {
-        pending.push(`del:${index}`);
-    }
-
-    elem.dataset["settingsGroupPending"] = pending.join(",");
+    modifyGroupPending(elem, index, "set", "del");
 }
 
 /**
