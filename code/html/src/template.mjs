@@ -72,9 +72,10 @@ export function loadConfigTemplate(name) {
 /** @typedef {InputOrSelect | HTMLSpanElement} TemplateLineElement */
 
 /**
+ * @import { DisplayValue } from './settings.mjs'
  * @param {DocumentFragment} fragment
  * @param {number} id
- * @param {any} cfg
+ * @param {{[k: string]: DisplayValue}} cfg
  */
 export function fillTemplateFromCfg(fragment, id, cfg) {
     let local = {"template-id": id};
@@ -94,14 +95,19 @@ export function fillTemplateFromCfg(fragment, id, cfg) {
                 ? elem.dataset["key"]
                 : "";
 
-        if (!key || !cfg[key]) {
+        if (!key) {
             continue;
         }
 
         const value = cfg[key];
-        if (elem instanceof HTMLInputElement) {
+        if ((value === undefined) || (value === null)) {
+            continue;
+        }
+
+        const is_array = Array.isArray(value);
+        if (!is_array && elem instanceof HTMLInputElement) {
             setInputValue(elem, value);
-        } else if (elem instanceof HTMLSelectElement) {
+        } else if (!is_array && elem instanceof HTMLSelectElement) {
             setSelectValue(elem, value);
         } else if (elem instanceof HTMLSpanElement) {
             setSpanValue(elem, value);
