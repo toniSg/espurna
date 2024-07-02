@@ -8,60 +8,113 @@ import { addFromTemplate } from './template.mjs';
 import { moreElem } from './core.mjs';
 import { sendAction } from './connection.mjs';
 
-function addNode(cfg, showMore) {
+/**
+ * @param {boolean?} showMore
+ * @param {any?} cfg
+ */
+function addNode(showMore = false, cfg = undefined) {
     const container = document.getElementById("networks");
-    addFromTemplate(container, "network-config", cfg);
+    if (!container) {
+        return;
+    }
 
-    if ((showMore === undefined) || showMore) {
+    addFromTemplate(container, "network-config", cfg);
+    if (showMore && container.lastChild instanceof HTMLElement) {
         moreElem(container.lastChild)
     }
 }
 
-function scanResult(values) {
-    let loading = document.querySelector("div.scan.loading");
-    loading.style.display = "none";
-
-    for (let button of document.querySelectorAll(".button-wifi-scan")) {
-        button.disabled = false;
+/** @param {function(HTMLTableElement): void} callback */
+function withTable(callback) {
+    const table = document.getElementById("scanResult");
+    if (!(table instanceof HTMLTableElement)) {
+        return;
     }
 
-    let table = document.getElementById("scanResult");
-    table.style.display = "table";
+    callback(table);
+}
 
-    let [results] = table.tBodies;
-    let row = results.insertRow();
-    for (let value of values) {
-        let cell = row.insertCell();
-        cell.appendChild(document.createTextNode(value));
+/** @param {function(HTMLInputElement): void} callback */
+function withButton(callback) {
+    /** @type {NodeListOf<HTMLInputElement>} */
+    (document.querySelectorAll("input.button-wifi-scan"))
+        .forEach(callback);
+}
+
+/** @param {boolean} value */
+function buttonDisabled(value) {
+    withButton((button) => {
+        button.disabled = value;
+    });
+}
+
+/** @param {boolean} value */
+function loadingDisplay(value) {
+    const loading = document.querySelector("div.scan.loading");
+    if (loading instanceof HTMLElement) {
+        loading.style.display = value ? "table" : "none";
     }
 }
 
+/** @param {string[]} values */
+function scanResult(values) {
+    withTable((table) => {
+        buttonDisabled(false);
+        loadingDisplay(false);
+        table.style.display = "table";
+
+        const [results] = table.tBodies;
+        const row = results.insertRow();
+        for (let value of values) {
+            const cell = row.insertCell();
+            cell.appendChild(document.createTextNode(value));
+        }
+    });
+}
+
+/** @param {Event} event */
 function scanStart(event) {
     event.preventDefault();
 
-    let [results] = document.getElementById("scanResult").tBodies;
-    while (results.rows.length) {
-        results.deleteRow(0);
-    }
+    withTable((table) => {
+        const [results] = table.tBodies;
+        while (results.rows.length) {
+            results.deleteRow(0);
+        }
 
-    let loading = document.querySelector("div.scan.loading");
-    loading.style.display = "inherit";
+        loadingDisplay(true);
+        buttonDisabled(true);
 
-    for (let button of document.querySelectorAll(".button-wifi-scan")) {
-        button.disabled = true;
-    }
-
-    sendAction("scan");
+        sendAction("scan");
+    });
 }
 
+/**
+ * @typedef {import('./settings.mjs').KeyValueListeners } KeyValueListeners
+ */
+
+/**
+ * @returns {KeyValueListeners}
+ */
 function listeners() {
     return {
         "wifiConfig": (_, value) => {
             const container = document.getElementById("networks");
-            container.dataset["settingsMax"] = value.max;
+            if (!(container instanceof HTMLElement)) {
+                return;
+            }
 
-            value.networks.forEach((entries) => {
-                addNode(fromSchema(entries, value.schema), false);
+            if (value.max !== undefined) {
+                container.dataset["settingsMax"] = value.max;
+            }
+
+            const networks = value.networks;
+            if (!Array.isArray(networks)) {
+                return;
+            }
+
+            networks.forEach((entries) => {
+                addNode(false, fromSchema(entries, value.schema));
             });
         },
         "scanResult": (_, value) => {
@@ -77,6 +130,7 @@ export function init() {
         addNode();
     });
 
-    document.querySelector(".button-wifi-scan")
-        .addEventListener("click", scanStart);
+    withButton((button) => {
+        button.addEventListener("click", scanStart);
+    });
 }

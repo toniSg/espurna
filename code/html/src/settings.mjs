@@ -37,7 +37,7 @@ function resetGroupPending(elem) {
 /**
  * @param {string[]} source
  * @param {string[]} schema
- * @returns {{[k: string]: string}}
+ * @returns {{[k: string]: any}}
  */
 export function fromSchema(source, schema) {
     if (schema.length !== source.length) {
