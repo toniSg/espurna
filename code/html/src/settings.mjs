@@ -685,9 +685,10 @@ export function setInputValue(input, value) {
             (typeof value === "string") ? stringToBoolean(value) :
             (typeof value === "number") ? (value !== 0) : false;
         break;
-    case "text":
-    case "password":
     case "number":
+    case "password":
+    case "range":
+    case "text":
         if (value !== null) {
             input.value = value.toString();
         }
