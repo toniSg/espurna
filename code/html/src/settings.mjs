@@ -1,6 +1,6 @@
 import { notifyError } from './errors.mjs';
 import { pageReloadIn } from './core.mjs';
-import { send, sendAction, configUrl } from './connection.mjs';
+import { send, sendAction, connectionUrls } from './connection.mjs';
 import { validateForms } from './validate.mjs';
 
 /**
@@ -1205,16 +1205,16 @@ function handleSettingsFile(event) {
         try {
             const data = event.target?.result;
             if (!data) {
-                throw `${event.target} is missing data payload`;
+                throw new Error(`${event.target} is missing data payload`);
             }
 
             if (data instanceof ArrayBuffer) {
-                throw `invalid payload type`;
+                throw new Error("invalid payload type - ArrayBuffer");
             }
 
             sendAction("restore", JSON.parse(data));
         } catch (e) {
-            notifyError(null, null, 0, 0, e);
+            notifyError(/** @type {Error} */(e));
         }
     };
     reader.readAsText(inputFile);
@@ -1272,14 +1272,14 @@ export function init() {
         ?.addEventListener("click", (event) => {
             event.preventDefault();
 
-            const config = configUrl();
-            if (!config) {
+            const urls = connectionUrls();
+            if (!urls) {
                 return;
             }
 
             const elem = document.getElementById("downloader");
             if (elem instanceof HTMLAnchorElement) {
-                elem.href = config.href;
+                elem.href = urls.config.href;
                 elem.click();
             }
         });

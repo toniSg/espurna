@@ -1,5 +1,5 @@
-import { notifyError } from './errors.mjs';
-import { upgradeUrl } from './connection.mjs';
+import { notifyMessage } from './errors.mjs';
+import { connectionUrls } from './connection.mjs';
 import { variableListeners } from './settings.mjs';
 
 let FreeSize = 0;
@@ -57,7 +57,7 @@ function checkFlashMode(buffer) {
 }
 
 function notifyValueError(event) {
-    notifyError(`ERROR while attempting OTA upgrade - XHR ${event.type}`, null, 0, 0, null);
+    notifyMessage(`ERROR while attempting OTA upgrade - XHR ${event.type}`);
 }
 
 /** 
@@ -65,6 +65,11 @@ function notifyValueError(event) {
  */
 function onButtonClick(event) {
     event.preventDefault();
+
+    const urls = connectionUrls();
+    if (!urls) {
+        return;
+    }
 
     const elem = document.querySelector("input[name='upgrade']");
     const file = elem.files[0];
@@ -97,7 +102,7 @@ function onButtonClick(event) {
             }
         }, false);
 
-    xhr.open("POST", upgradeUrl().href);
+    xhr.open("POST", urls.upgrade.href);
     xhr.send(data);
 }
 

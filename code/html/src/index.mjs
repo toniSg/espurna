@@ -1,7 +1,7 @@
 /// <reference path="index.build.d.mts" />
 
-import { notifyError } from './errors.mjs';
-window.onerror = notifyError;
+import { notifyError, notifyErrorEvent } from './errors.mjs';
+window.addEventListener("error", notifyErrorEvent);
 
 import {
     pageReloadIn,
@@ -115,7 +115,7 @@ function deviceNow(value) {
         Now.date = normalizedDate(value);
         Now.offset = timestampOffset(value);
     } catch (e) {
-        notifyError(null, null, 0, 0, e);
+        notifyError(/** @type {Error} */(e));
     }
 }
 
@@ -263,7 +263,7 @@ function askAndCallSimpleAction(event) {
 }
 
 /**
- * @import { KeyValueListeners } from './settings.mjs'
+ * @typedef {import('./settings.mjs').KeyValueListeners } KeyValueListeners
  */
 
 /**
@@ -395,7 +395,7 @@ function onJsonPayload(event) {
                 .replace(/\t/g, "\\t"));
         updateVariables(parsed);
     } catch (e) {
-        notifyError(null, null, 0, 0, e);
+        notifyError(/** @type {Error} */(e));
     }
 }
 
