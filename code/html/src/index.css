@@ -329,7 +329,7 @@ input.checkbox-toggle {
     background: var(--toggle-bg);
     transition: var(--toggle-duration, .2s) cubic-bezier(.65, 0, .5, 1);
     user-select: none;
-    outline: none;
+    outline: thin solid color-mix(in srgb, var(--toggle-bg) 25%, rgba(0,0,0,.2));
     cursor: pointer;
 }
 
