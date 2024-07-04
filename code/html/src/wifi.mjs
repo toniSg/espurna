@@ -34,21 +34,21 @@ function networkAdd(elem) {
 }
 
 /** @param {function(HTMLTableElement): void} callback */
-function withTable(callback) {
+function withScanTable(callback) {
     callback(/** @type {!HTMLTableElement} */
         (document.getElementById("scanResult")));
 }
 
-/** @param {function(HTMLInputElement): void} callback */
-function withButton(callback) {
-    /** @type {NodeListOf<HTMLInputElement>} */
-    (document.querySelectorAll("input.button-wifi-scan"))
+/** @param {function(HTMLButtonElement): void} callback */
+function withScanButton(callback) {
+    /** @type {NodeListOf<HTMLButtonElement>} */
+    (document.querySelectorAll("button.button-wifi-scan"))
         .forEach(callback);
 }
 
 /** @param {boolean} value */
-function buttonDisabled(value) {
-    withButton((button) => {
+function scanButtonDisabled(value) {
+    withScanButton((button) => {
         button.disabled = value;
     });
 }
@@ -62,16 +62,21 @@ function loadingDisplay(value) {
 
 /** @param {string[]} values */
 function scanResult(values) {
-    withTable((table) => {
-        buttonDisabled(false);
+    withScanTable((table) => {
+        scanButtonDisabled(false);
         loadingDisplay(false);
         table.style.display = "table";
 
-        const [results] = table.tBodies;
-        const row = results.insertRow();
+        const [body] = table.tBodies;
+        const row = body.insertRow();
         for (let value of values) {
             const cell = row.insertCell();
             cell.appendChild(document.createTextNode(value));
+        }
+
+        const footer = table.nextElementSibling;
+        if (footer instanceof HTMLSpanElement) {
+            footer.textContent = (new Date()).toLocaleString();
         }
     });
 }
@@ -80,14 +85,14 @@ function scanResult(values) {
 function scanStart(event) {
     event.preventDefault();
 
-    withTable((table) => {
-        const [results] = table.tBodies;
-        while (results.rows.length) {
-            results.deleteRow(0);
+    withScanTable((table) => {
+        const [body] = table.tBodies;
+        while (body.rows.length) {
+            body.deleteRow(0);
         }
 
         loadingDisplay(true);
-        buttonDisabled(true);
+        scanButtonDisabled(true);
 
         sendAction("scan");
     });
@@ -114,7 +119,7 @@ export function init() {
         groupSettingsOnAddElem(elem, () => {
             networkAdd(elem);
         });
-        withButton((button) => {
+        withScanButton((button) => {
             button.addEventListener("click", scanStart);
         });
     });
