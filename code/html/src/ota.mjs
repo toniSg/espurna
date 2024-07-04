@@ -4,6 +4,18 @@ import { variableListeners } from './settings.mjs';
 
 let __free_size = 0;
 
+/** @param {function(HTMLInputElement): void} callback */
+function withUpgrade(callback) {
+    callback(/** @type {!HTMLInputElement} */
+        (document.querySelector("input[name=upgrade]")));
+}
+
+/** @param {function(HTMLProgressElement): void} callback */
+function withProgress(callback) {
+    callback(/** @type {!HTMLProgressElement} */
+        (document.querySelector("progress#upgrade-progress")));
+}
+
 /** 
  * @param {number} flash_mode
  * @returns string
@@ -64,54 +76,52 @@ function onButtonClick(event) {
 
     const urls = connectionUrls();
     if (!urls) {
+        alert("Not connected");
         return;
     }
 
-    const upgrade = document.querySelector("input[name='upgrade']");
-    if (!(upgrade instanceof HTMLInputElement)) {
-        return;
-    }
+    withUpgrade((upgrade) => {
+        const files = upgrade.files;
+        if (!files) {
+            alert("No file selected");
+            return;
+        }
 
-    const files = upgrade.files;
-    if (!files) {
-        return;
-    }
+        const data = new FormData();
+        data.append("upgrade", files[0], files[0].name);
 
-    const data = new FormData();
-    data.append("upgrade", files[0], files[0].name);
+        const xhr = new XMLHttpRequest();
 
-    const xhr = new XMLHttpRequest();
+        xhr.addEventListener("error", notifyValueError, false);
+        xhr.addEventListener("abort", notifyValueError, false);
 
-    xhr.addEventListener("error", notifyValueError, false);
-    xhr.addEventListener("abort", notifyValueError, false);
-
-    xhr.addEventListener("load",
-        () => {
-            if ("OK" === xhr.responseText) {
-                alert("Firmware image uploaded, board rebooting. This page will be refreshed in 5 seconds");
-            } else {
-                alert(`ERROR while attempting OTA upgrade - ${xhr.status.toString()} ${xhr.statusText}, ${xhr.responseText}`);
-            }
-        }, false);
-
-    const progress = document.querySelector("progress#upgrade-progress");
-    if (progress instanceof HTMLProgressElement) {
         xhr.addEventListener("load",
             () => {
-                progress.style.display = "none";
-            });
-        xhr.upload.addEventListener("progress",
-            (event) => {
-                progress.style.display = "inherit";
-                if (event.lengthComputable) {
-                    progress.value = event.loaded;
-                    progress.max = event.total;
+                if ("OK" === xhr.responseText) {
+                    alert("Firmware image uploaded, board rebooting. This page will be refreshed in 5 seconds");
+                } else {
+                    alert(`ERROR while attempting OTA upgrade - ${xhr.status.toString()} ${xhr.statusText}, ${xhr.responseText}`);
                 }
             }, false);
-    }
 
-    xhr.open("POST", urls.upgrade.href);
-    xhr.send(data);
+        withProgress((progress) => {
+            xhr.addEventListener("load",
+                () => {
+                    progress.style.display = "none";
+                });
+            xhr.upload.addEventListener("progress",
+                (event) => {
+                    progress.style.display = "inherit";
+                    if (event.lengthComputable) {
+                        progress.value = event.loaded;
+                        progress.max = event.total;
+                    }
+                }, false);
+        });
+
+        xhr.open("POST", urls.upgrade.href);
+        xhr.send(data);
+    });
 }
 
 /** 
@@ -129,7 +139,7 @@ async function onFileChanged(event) {
     event.preventDefault();
 
     const button = document.querySelector(".button-upgrade");
-    if (!(button instanceof HTMLInputElement)) {
+    if (!(button instanceof HTMLButtonElement)) {
         return;
     }
 
@@ -145,7 +155,7 @@ async function onFileChanged(event) {
 
     const file = event.target.files[0];
 
-    const filename = document.querySelector("input[name='filename']");
+    const filename = document.querySelector("input[name=filename]");
     if (filename instanceof HTMLInputElement) {
         filename.value = file.name;
     }
@@ -187,20 +197,20 @@ function listeners() {
 export function init() {
     variableListeners(listeners());
 
-    const upgrade = document.querySelector("input[name='upgrade']");
+    const [upgrade] = document.querySelectorAll("input[name=upgrade]");
     if (!(upgrade instanceof HTMLInputElement)) {
         return;
     }
 
-    document.querySelector(".button-upgrade-browse")
-        ?.addEventListener("click", () => {
-            upgrade.click();
-        });
+    const [browse] = document.querySelectorAll(".button-upgrade-browse")
+    browse.addEventListener("click", () => {
+        upgrade.click();
+    });
 
     upgrade.addEventListener("change", onFileChanged);
 
     const button = document.querySelector(".button-upgrade");
-    if (!(button instanceof HTMLInputElement)) {
+    if (!(button instanceof HTMLButtonElement)) {
         return;
     }
 

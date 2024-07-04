@@ -11,7 +11,7 @@ function buttonHandler(event) {
         return;
     }
 
-    if (!(event.target instanceof HTMLInputElement)) {
+    if (!(event.target instanceof HTMLButtonElement)) {
         return;
     }
 
@@ -39,7 +39,7 @@ function buttonHandler(event) {
  * @param {number} button
  */
 function styleButtons(moving, button) {
-    const elems = /** @type {NodeListOf<HTMLInputElement>} */
+    const elems = /** @type {NodeListOf<HTMLButtonElement>} */
         (document.querySelectorAll("curtain-button"));
     if (!moving || (0 === button)) {
         if (!moving) {
@@ -76,7 +76,7 @@ function styleButtons(moving, button) {
 
 /** @param {Event} event */
 function positionHandler(event) {
-    if (!(event.target instanceof HTMLInputElement)) {
+    if (!(event.target instanceof HTMLButtonElement)) {
         return;
     }
 

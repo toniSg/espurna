@@ -134,7 +134,7 @@ function initMagnitudes(types, errors, units) {
     });
 
     /** @type {SupportedUnits[][]} */
-    (units.values).forEach((value, id) => {
+    (units).forEach((value, id) => {
         Magnitudes.units.supported.set(id, value);
         value.forEach(([type, name]) => {
             Magnitudes.units.names.set(type, name);
@@ -483,15 +483,16 @@ function updateMagnitudes(values, schema) {
             props.units = magnitude.units;
         }
 
+        const units =
+            Magnitudes.units.names.get(props.units) ?? "";
+
         if (typeof magnitude.error === "number" && 0 !== magnitude.error) {
             input.value =
                 Magnitudes.errors.get(magnitude.error) ?? "Unknown error";
-        } else if (typeof magnitude.value === "number") {
-            const units =
-                Magnitudes.units.names.get(props.units) ?? "";
+        } else if (typeof magnitude.value === "string") {
             input.value = `${magnitude.value}${units}`;
         } else {
-            input.value = "?";
+            input.value = magnitude.value?.toString() ?? "?";
         }
     });
 }

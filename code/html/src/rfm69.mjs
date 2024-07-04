@@ -10,14 +10,21 @@ import { sendAction } from './connection.mjs';
 const Filters = new Map();
 
 /** @param {function(HTMLTableElement): void} callback */
-function withMessages(callback) {
+function withTable(callback) {
     callback(/** @type {!HTMLTableElement} */
         (document.getElementById("rfm69-messages")));
 }
 
+/** @param {function(HTMLTableSectionElement): void} callback */
+function withMessages(callback) {
+    withTable((elem) => {
+        callback(elem.tBodies[0]);
+    });
+}
+
 /** @param {[number, number, number, string, string, number, number, number]} message */
 function addMessage(message) {
-    withMessages((elem) => {
+    withTable((elem) => {
         const timestamp = (new Date())
             .toLocaleTimeString("en-US", {hour12: false});
 

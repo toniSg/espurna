@@ -50,6 +50,7 @@ import { init as initSchedule } from './schedule.mjs';
 import { init as initSensor } from './sensor.mjs';
 import { init as initThermostat } from './thermostat.mjs';
 import { init as initThingspeak } from './thingspeak.mjs';
+import { init as initLocal } from './local.mjs';
 
 /** @type {number | null} */
 let KeepTime = null;
@@ -523,17 +524,14 @@ function init() {
         initCurtain();
     }
 
-    // don't autoconnect w/ localhost or file://
     if (MODULE_LOCAL) {
-        updateVariables({
-            webMode: 0,
-            now: "2024-01-01T00:00:00+01:00",
-        });
+        initLocal();
         KeepTime = window.setInterval(keepTime, 1000);
         modulesVisibleAll();
         return;
     }
 
+    // don't autoconnect w/ localhost or file://
     connect(onJsonPayload);
 }
 

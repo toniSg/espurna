@@ -31,7 +31,6 @@ function onConfig(value) {
             elem, "network-config",
             value.networks, value.schema,
             value.max ?? 0);
-        lastMoreElem(elem);
     });
 }
 
@@ -40,6 +39,7 @@ function onConfig(value) {
  */
 function networkAdd(elem) {
     addFromTemplate(elem, "network-config", {});
+    lastMoreElem(elem);
 }
 
 /** @param {function(HTMLTableElement): void} callback */

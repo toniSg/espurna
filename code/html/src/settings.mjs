@@ -137,12 +137,6 @@ function isIgnoredElement(elem) {
     return elem.dataset["settingsIgnore"] !== undefined;
 }
 
-/**
- * @param {HTMLElement} elem
- */
-function isInputOrSelect(elem) {
-    return (elem instanceof HTMLInputElement) || (elem instanceof HTMLSelectElement);
-}
 
 /**
  * @param {HTMLElement} group
@@ -762,6 +756,10 @@ export function setSelectValue(select, value) {
 export function setOriginalsFromValues(elems) {
     for (let elem of elems) {
         if (elem instanceof HTMLInputElement) {
+            if (elem.readOnly) {
+                continue;
+            }
+
             if (elem.type === "checkbox") {
                 elem.dataset["original"] = elem.checked.toString();
             } else {
@@ -1020,11 +1018,13 @@ export function checkAndSetElementChanged(elem) {
  */
 export function onElementChange(event) {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) {
+    if (!(target instanceof HTMLInputElement)
+     && !(target instanceof HTMLSelectElement))
+    {
         return;
     }
 
-    if (!isInputOrSelect(target)) {
+    if (target instanceof HTMLInputElement && target.readOnly) {
         return;
     }
 

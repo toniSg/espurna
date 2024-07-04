@@ -49,19 +49,19 @@ function addNode() {
 
     const id = container.childElementCount.toString();
     const line = loadConfigTemplate("rfb-node");
-    line.querySelectorAll("span").forEach((span) => {
-        span.textContent = id;
-    });
-    line.querySelectorAll("input").forEach((input) => {
-        input.dataset["id"] = id;
-        input.setAttribute("id", `${input.name}${id}`);
-    });
 
-    for (let action of ["learn", "forget"]) {
-        for (let button of line.querySelectorAll(`.button-rfb-${action}`)) {
+    line.querySelectorAll("input")
+        .forEach((input) => {
+            input.dataset["id"] = id;
+            input.setAttribute("id", `${input.name}${id}`);
+        });
+
+    ["learn", "forget"]
+        .map((x) => line.querySelector(`.button-rfb-${x}`))
+        .filter((x) => x instanceof HTMLButtonElement)
+        .forEach((button) => {
             button.addEventListener("click", onButtonPress);
-        }
-    }
+        });
 
     mergeTemplate(container, line);
 }

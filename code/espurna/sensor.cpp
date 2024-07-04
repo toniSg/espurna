@@ -3322,11 +3322,9 @@ void units(JsonObject& root) {
 
         const auto range = units::range(magnitude::get(index).type);
         for (auto it = range.begin(); it != range.end(); ++it) {
-            JsonArray& unit = units.createNestedArray();
+            JsonArray& unit = supported.createNestedArray();
             unit.add(static_cast<int>(*it)); // raw id
             unit.add(units::name(*it));  // as string
-
-            supported.add(unit);
         }
     }
 }

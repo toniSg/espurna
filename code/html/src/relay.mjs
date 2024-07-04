@@ -149,7 +149,7 @@ export function createNodeList(id, values, keyPrefix) {
             (label, input) => {
                 const enumerables = getEnumerables("relay");
                 label.textContent =
-                    (enumerables)
+                    (enumerables[index])
                         ? enumerables[index].name
                         : `Switch #${index}`;
 
@@ -164,10 +164,10 @@ export function createNodeList(id, values, keyPrefix) {
 function listeners() {
     return {
         "relayConfig": (_, value) => {
-            updateFromConfig(value.relays, value.schema);
+            updateFromConfig(value.values, value.schema);
         },
         "relayState": (_, value) => {
-            updateFromState(value.relays, value.schema);
+            updateFromState(value.values, value.schema);
         },
     };
 }
