@@ -69,22 +69,21 @@ export function loadConfigTemplate(name) {
     return template;
 }
 
+/**
+ * @import { DisplayValue } from './settings.mjs'
+ * @typedef {{[k: string]: DisplayValue}} TemplateConfig
+ */
+
 /** @typedef {InputOrSelect | HTMLSpanElement} TemplateLineElement */
 
 /**
- * @import { DisplayValue } from './settings.mjs'
  * @param {DocumentFragment} fragment
  * @param {number} id
- * @param {{[k: string]: DisplayValue}} cfg
+ * @param {TemplateConfig} cfg
  */
-export function fillTemplateFromCfg(fragment, id, cfg) {
-    let local = {"template-id": id};
-    if (cfg === undefined) {
-        cfg = {};
-    }
-
-    Object.assign(local, cfg);
-    cfg = local;
+export function fillTemplateFromCfg(fragment, id, cfg = {}) {
+    const local = {"template-id": id};
+    cfg = Object.assign({}, local, cfg);
 
     for (let elem of /** @type {NodeListOf<TemplateLineElement>} */(fragment.querySelectorAll("input,select,span"))) {
         const key =
@@ -130,10 +129,100 @@ export function mergeTemplate(target, template) {
 /**
  * @param {HTMLElement} container
  * @param {string} name
- * @param {any} cfg
+ * @param {TemplateConfig} cfg
  */
 export function addFromTemplate(container, name, cfg) {
     const fragment = loadConfigTemplate(name);
     fillTemplateFromCfg(fragment, container.childElementCount, cfg);
     mergeTemplate(container, fragment);
+}
+
+// TODO: note that we also include kv schema as 'data-settings-schema' on the container.
+// produce a 'set' and compare instead of just matching length?
+
+/**
+ * @param {DisplayValue[]} values
+ * @param {string[]} schema
+ * @returns {TemplateConfig}
+ */
+export function fromSchema(values, schema) {
+    if (schema.length !== values.length) {
+        throw `Schema mismatch! Expected length ${schema.length} vs. ${values.length}`;
+    }
+
+    /** @type {{[k: string]: any}} */
+    const out = {};
+    schema.forEach((key, index) => {
+        out[key] = values[index];
+    });
+
+    return out;
+}
+
+/**
+ * @param {DisplayValue[][]} source
+ * @param {string[]} schema
+ * @returns {TemplateConfig[]}
+ */
+export function prepareFromSchema(source, schema) {
+    return source.map((values) => fromSchema(values, schema));
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {string} name
+ * @param {DisplayValue[][]} entries
+ * @param {string[]} schema
+ * @param {number} max
+ */
+export function addFromTemplateWithSchema(container, name, entries, schema, max = 0) {
+    const prepared = prepareFromSchema(entries, schema);
+    if (!prepared) {
+        return;
+    }
+
+    if (max > 0) {
+        container.dataset["settingsMax"] = max.toString();
+    }
+
+    prepared.forEach((cfg) => {
+        addFromTemplate(container, name, cfg);
+    });
+}
+
+export class BaseInput {
+    /** @param {string} name */
+    constructor(name) {
+        this.fragment = loadConfigTemplate(name);
+    }
+
+    /**
+     * @param {function(HTMLLabelElement, HTMLInputElement): void} callback
+     * @returns {DocumentFragment}
+     */
+    with(callback) {
+        const out = document.createDocumentFragment();
+        out.appendChild(this.fragment.cloneNode(true));
+
+        const root = /** @type {!HTMLDivElement} */
+            (out.children[0]);
+
+        callback(
+            /** @type {!HTMLLabelElement} */(root.children[0]),
+            /** @type {!HTMLInputElement} */(root.children[1]));
+
+        return out;
+    }
+}
+
+export class TextInput extends BaseInput {
+    constructor() {
+        super("text-input");
+    }
+}
+
+export class NumberInput extends BaseInput {
+    constructor() {
+        super("number-input");
+    }
 }

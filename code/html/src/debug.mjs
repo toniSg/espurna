@@ -77,11 +77,7 @@ class CmdOutputBase {
 const CmdOutput = new CmdOutputBase();
 
 /**
- * @typedef {import('./settings.mjs').KeyValueListeners } KeyValueListeners
- */
-
-/**
- * @returns {KeyValueListeners}
+ * @returns {import('./settings.mjs').KeyValueListeners}
  */
 function listeners() {
     return {
@@ -112,7 +108,6 @@ function onFormSubmit(event) {
 
     const cmd = event.target.elements
         .namedItem("cmd");
-
     if (!(cmd instanceof HTMLInputElement)) {
         return;
     }

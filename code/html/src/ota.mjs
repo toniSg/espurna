@@ -174,11 +174,7 @@ async function onFileChanged(event) {
 }
 
 /**
- * @typedef {import('./settings.mjs').KeyValueListeners } KeyValueListeners
- */
-
-/**
- * @returns {KeyValueListeners}
+ * @returns {import('./settings.mjs').KeyValueListeners}
  */
 function listeners() {
     return {

@@ -262,12 +262,12 @@ function askAndCallSimpleAction(event) {
     });
 }
 
-/**
- * @typedef {import('./settings.mjs').KeyValueListeners } KeyValueListeners
- */
+// TODO https://github.com/microsoft/TypeScript/issues/58969
+// at-import'ed type becomes 'unused' for some reason
+// until fixed, prefer direct import vs. typedef
 
 /**
- * @returns {KeyValueListeners}
+ * @returns {import('./settings.mjs').KeyValueListeners}
  */
 function listeners() {
     return {
@@ -329,7 +329,7 @@ function initSetupPassword(form) {
             event.preventDefault();
             const forms = [form];
             if (validateFormsPasswords(forms, true)) {
-                applySettings(getData(forms, {cleanup: true}));
+                applySettings(getData(forms, {cleanup: false}));
             }
         });
     document.querySelector(".button-generate-password")

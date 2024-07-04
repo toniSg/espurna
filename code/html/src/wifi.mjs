@@ -1,37 +1,51 @@
 import {
-    fromSchema,
-    groupSettingsOnAdd,
+    groupSettingsOnAddElem,
     variableListeners,
 } from './settings.mjs';
 
-import { addFromTemplate } from './template.mjs';
+import { addFromTemplate, addFromTemplateWithSchema } from './template.mjs';
 import { moreElem } from './core.mjs';
 import { sendAction } from './connection.mjs';
 
-/**
- * @param {boolean?} showMore
- * @param {any?} cfg
- */
-function addNode(showMore = false, cfg = undefined) {
-    const container = document.getElementById("networks");
-    if (!container) {
-        return;
-    }
+/** @param {function(HTMLElement): void} callback */
+function withNetworks(callback) {
+    callback(/** @type {!HTMLElement} */
+        (document.getElementById("networks")));
+}
 
-    addFromTemplate(container, "network-config", cfg);
-    if (showMore && container.lastChild instanceof HTMLElement) {
-        moreElem(container.lastChild)
+/**
+ * @param {HTMLElement} elem
+ */
+function lastMoreElem(elem) {
+    if (elem.lastChild instanceof HTMLElement) {
+        moreElem(elem.lastChild)
     }
+}
+
+/**
+ * @param {any} value
+ */
+function onConfig(value) {
+    withNetworks((elem) => {
+        addFromTemplateWithSchema(
+            elem, "network-config",
+            value.networks, value.schema,
+            value.max ?? 0);
+        lastMoreElem(elem);
+    });
+}
+
+/**
+ * @param {HTMLElement} elem
+ */
+function networkAdd(elem) {
+    addFromTemplate(elem, "network-config", {});
 }
 
 /** @param {function(HTMLTableElement): void} callback */
 function withTable(callback) {
-    const table = document.getElementById("scanResult");
-    if (!(table instanceof HTMLTableElement)) {
-        return;
-    }
-
-    callback(table);
+    callback(/** @type {!HTMLTableElement} */
+        (document.getElementById("scanResult")));
 }
 
 /** @param {function(HTMLInputElement): void} callback */
@@ -50,10 +64,9 @@ function buttonDisabled(value) {
 
 /** @param {boolean} value */
 function loadingDisplay(value) {
-    const loading = document.querySelector("div.scan.loading");
-    if (loading instanceof HTMLElement) {
-        loading.style.display = value ? "table" : "none";
-    }
+    const loading = (/** @type {!HTMLDivElement} */
+        (document.querySelector("div.scan.loading")));
+    loading.style.display = value ? "table" : "none";
 }
 
 /** @param {string[]} values */
@@ -90,32 +103,12 @@ function scanStart(event) {
 }
 
 /**
- * @typedef {import('./settings.mjs').KeyValueListeners } KeyValueListeners
- */
-
-/**
- * @returns {KeyValueListeners}
+ * @returns {import('./settings.mjs').KeyValueListeners}
  */
 function listeners() {
     return {
         "wifiConfig": (_, value) => {
-            const container = document.getElementById("networks");
-            if (!(container instanceof HTMLElement)) {
-                return;
-            }
-
-            if (value.max !== undefined) {
-                container.dataset["settingsMax"] = value.max;
-            }
-
-            const networks = value.networks;
-            if (!Array.isArray(networks)) {
-                return;
-            }
-
-            networks.forEach((entries) => {
-                addNode(false, fromSchema(entries, value.schema));
-            });
+            onConfig(value);
         },
         "scanResult": (_, value) => {
             scanResult(value);
@@ -124,13 +117,14 @@ function listeners() {
 }
 
 export function init() {
-    variableListeners(listeners());
-
-    groupSettingsOnAdd("networks", () => {
-        addNode();
-    });
-
-    withButton((button) => {
-        button.addEventListener("click", scanStart);
+    withNetworks((elem) => {
+        variableListeners(listeners());
+        // TODO: as event arg?
+        groupSettingsOnAddElem(elem, () => {
+            networkAdd(elem);
+        });
+        withButton((button) => {
+            button.addEventListener("click", scanStart);
+        });
     });
 }

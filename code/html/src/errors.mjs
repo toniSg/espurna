@@ -56,8 +56,9 @@ export function showNotification(text) {
  * @param {number} lineno
  * @param {number} colno
  * @param {any} error
+ * @return {string}
  */
-function notify(message, source, lineno, colno, error) {
+export function formatErrorEvent(message, source, lineno, colno, error) {
     let text = "";
     if (message) {
         text += message;
@@ -71,24 +72,28 @@ function notify(message, source, lineno, colno, error) {
         text += formatError(error);
     }
 
-    showNotification(text);
+    return text;
 }
 
 /** @param {string} message */
 export function notifyMessage(message) {
-    notify(message, "", 0, 0, null);
+    showNotification(
+        formatErrorEvent(message, "", 0, 0, null));
 }
 
 /** @param {Error} error */
 export function notifyError(error) {
-    notify("", "", 0, 0, error);
+    showNotification(
+        formatErrorEvent("", "", 0, 0, error));
 }
 
 /** @param {ErrorEvent} event */
 export function notifyErrorEvent(event) {
-    notify(event.message,
-        event.filename,
-        event.lineno,
-        event.colno,
-        event.error);
+    showNotification(
+        formatErrorEvent(
+            event.message,
+            event.filename,
+            event.lineno,
+            event.colno,
+            event.error));
 }

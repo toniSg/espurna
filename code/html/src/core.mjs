@@ -108,7 +108,7 @@ export function onPanelTargetClick(event) {
  * @param {number} length
  * @param {RandomStringOptions} options
  */
-export function randomString(length, {hex = false, lowercase = true, numbers = true, special = false, uppercase = true} = {}) {
+export function randomString(length, {hex = false, lowercase = false, numbers = false, special = false, uppercase = false} = {}) {
     let mask = "";
     if (lowercase || hex) { mask += "abcdef"; }
     if (lowercase) { mask += "ghijklmnopqrstuvwxyz"; }

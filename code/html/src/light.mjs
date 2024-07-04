@@ -4,24 +4,46 @@ import { sendAction } from './connection.mjs';
 import { mergeTemplate, loadTemplate } from './template.mjs';
 import { addEnumerables, variableListeners } from './settings.mjs';
 
-let ColorPicker = null;
-
-function colorToHsvString(color) {
-    var h = String(Math.round(color.hsv.h));
-    var s = String(Math.round(color.hsv.s));
-    var v = String(Math.round(color.hsv.v));
-    return h + "," + s + "," + v;
+/** @param {function(HTMLElement): void} callback */
+function withPicker(callback) {
+    const elem = document.getElementById("light-picker");
+    if (elem) {
+        callback(elem);
+    }
 }
 
-function hsvStringToColor(hsv) {
-    var parts = hsv.split(",");
+/**
+ * @param {iro.Color} color
+ * @returns {string}
+ */
+function colorToHsvString(color) {
+    const hsv =
+        [color.hsv.h, color.hsv.s, color.hsv.v]
+        .filter((value) => value !== undefined)
+        .map(Math.round);
+
+    if (hsv.length !== 3) {
+        return "0,0,0";
+    }
+
+    return hsv.join(",");
+}
+
+/**
+ * @param {string} string
+ */
+function hsvStringToColor(string) {
+    const parts = string.split(",")
+        .map(parseInt);
+
     return {
-        h: parseInt(parts[0]),
-        s: parseInt(parts[1]),
-        v: parseInt(parts[2])
+        h: parts[0] ?? 0,
+        s: parts[1] ?? 0,
+        v: parts[2] ?? 0,
     };
 }
 
+/** @param {string} type */
 function colorSlider(type) {
     return {component: iro.ui.Slider, options: {sliderType: type}};
 }
@@ -34,36 +56,50 @@ function colorBox() {
     return {component: iro.ui.Box, options: {}};
 }
 
+/**
+ * @param {"rgb" | "hsv"} mode
+ * @param {string} value
+ */
 function colorUpdate(mode, value) {
-    if ("rgb" === mode) {
-        ColorPicker.color.hexString = value;
-    } else if ("hsv" === mode) {
-        ColorPicker.color.hsv = hsvStringToColor(value);
-    }
+    withPicker((elem) => {
+        elem.dispatchEvent(
+            new CustomEvent("color:string", {
+                detail: {
+                    mode: mode,
+                    value: value,
+                }}));
+    });
 }
 
+/** @param {number} id */
 function lightStateHideRelay(id) {
     styleInject([
         styleVisible(`.relay-control-${id}`, false)
     ]);
 }
 
+/** @param {function(HTMLInputElement): void} callback */
+function withState(callback) {
+    const elem = document.getElementById("light-state-value");
+    if (elem instanceof HTMLInputElement) {
+        callback(elem);
+    }
+}
+
 function initLightState() {
-    const toggle = document.getElementById("light-state-value");
-    toggle.addEventListener("change", (event) => {
-        event.preventDefault();
-        sendAction("light", {state: event.target.checked});
+    withState((elem) => {
+        elem.addEventListener("change", (event) => {
+            event.preventDefault();
+            sendAction("light", {state: /** @type {!HTMLInputElement} */(event.target).checked});
+        });
+
     });
 }
 
-function updateLightState(value) {
-    const state = document.getElementById("light-state-value");
-    state.checked = value;
-    colorPickerState(value);
-}
-
+/** @param {boolean} value */
 function colorPickerState(value) {
-    const light = document.getElementById("light");
+    const light = /** @type {!HTMLElement} */
+        (document.getElementById("light"));
     if (value) {
         light.classList.add("light-on");
     } else {
@@ -71,20 +107,35 @@ function colorPickerState(value) {
     }
 }
 
+/** @param {boolean} value */
+function updateLightState(value) {
+    withState((elem) => {
+        elem.checked = value;
+        colorPickerState(value);
+    });
+}
+
+/** @param {boolean} value */
 function colorEnabled(value) {
     if (value) {
         lightAddClass("light-color");
     }
 }
 
+/** @param {boolean} value */
 function colorInit(value) {
     // TODO: ref. #2451, input:change causes pretty fast updates.
     // either make sure we don't cause any issue on the esp, or switch to
     // color:change instead (which applies after input ends)
+
+    /** @type {function(iro.Color): void} */
     let change = () => {
     };
 
+    /** @type {string[]} */
     const rules = [];
+
+    /** @type {{"component": any, "options": any}[]} */
     const layout = [];
 
     // RGB
@@ -110,57 +161,115 @@ function colorInit(value) {
     layout.push(colorSlider("value"));
     styleInject(rules);
 
-    ColorPicker = new iro.ColorPicker("#light-picker", {layout});
-    ColorPicker.on("input:change", change);
+    withPicker((elem) => {
+        // TODO tsserver does not like the resulting type
+        const picker = new /** @type {any} */
+            (iro.ColorPicker(elem, {layout}));
+        picker.on("input:change", change);
+
+        elem.addEventListener("color:string", (event) => {
+            const color = /** @type {CustomEvent<{mode: string, value: string}>} */
+                (event).detail;
+            switch (color.mode) {
+            case "rgb":
+                picker.color.hexString = color.value;
+                break;
+            case "hsv":
+                picker.color.hsv = hsvStringToColor(color.value);
+                break;
+            }
+        });
+    });
 }
 
-function updateMireds(value) {
-    const mireds = document.getElementById("mireds-value");
-    if (mireds !== null) {
-        mireds.value = value;
-        mireds.nextElementSibling.textContent = value;
+/** @param {function(HTMLInputElement): void} callback */
+function withMiredsValue(callback) {
+    const elem = document.getElementById("mireds-value");
+    if (elem instanceof HTMLInputElement) {
+        callback(elem);
     }
 }
 
-function lightAddClass(className) {
-    const light = document.getElementById("light");
-    light.classList.add(className);
+/**
+ * @param {HTMLElement} elem
+ * @param {string} text
+ */
+function textForNextSibling(elem, text) {
+    const next = elem.nextElementSibling;
+    if (!next) {
+        return;
+    }
+
+    next.textContent = text;
 }
 
-// White implies we should hide one or both white channels
+/**
+ * @param {HTMLInputElement} elem
+ * @param {number} value
+ */
+function setMiredsValue(elem, value) {
+    elem.value = value.toString();
+    textForNextSibling(elem, elem.value);
+}
+
+/** @param {number} value */
+function updateMireds(value) {
+    withMiredsValue((elem) => {
+        setMiredsValue(elem, value);
+    });
+}
+
+/** @param {string} className */
+function lightAddClass(className) {
+    const light = document.getElementById("light");
+    light?.classList?.add(className);
+}
+
+/**
+ * implies we should hide one or both white channels
+ * @param {boolean} value
+ */
 function whiteEnabled(value) {
     if (value) {
         lightAddClass("light-white");
     }
 }
 
-// When there are CCT controls, no need for raw white channel sliders
+/**
+ * no need for raw white channel sliders with cct
+ * @param {boolean} value
+ */
 function cctEnabled(value) {
     if (value) {
         lightAddClass("light-cct");
     }
 }
 
+/** @param {{cold: number, warm: number}} value */
 function cctInit(value) {
     const control = loadTemplate("mireds-control");
 
-    const slider = control.getElementById("mireds-value");
-    slider.setAttribute("min", value.cold);
-    slider.setAttribute("max", value.warm);
-    slider.addEventListener("change", (event) => {
-        event.target.nextElementSibling.textContent = event.target.value;
-        sendAction("light", {mireds: event.target.value});
+    withMiredsValue((elem) => {
+        elem.setAttribute("min", value.cold.toString());
+        elem.setAttribute("max", value.warm.toString());
+        elem.addEventListener("change", () => {
+            textForNextSibling(elem, elem.value);
+            sendAction("light", {mireds: elem.value});
+        });
+
     });
 
-    const datalist = control.querySelector("datalist");
+    const [datalist] = control.querySelectorAll("datalist");
     datalist.innerHTML = `
-    <option value="${value.cold}">Cold</option>
-    <option value="${value.warm}">Warm</option>
-    `;
+        <option value="${value.cold}">Cold</option>
+        <option value="${value.warm}">Warm</option>`;
 
-    mergeTemplate(document.getElementById("light-cct"), control);
+    mergeTemplate(
+        /** @type {HTMLElement} */
+        (document.getElementById("light-cct")), control);
 }
 
+/** @param {{[k: string]: any}} data */
 function updateLight(data) {
     for (const [key, value] of Object.entries(data)) {
         switch (key) {
@@ -202,60 +311,95 @@ function updateLight(data) {
     }
 }
 
+/** @param {Event} event */
 function onChannelSliderChange(event) {
-    event.target.nextElementSibling.textContent = event.target.value;
+    if (!(event.target instanceof HTMLInputElement)) {
+        return;
+    }
 
-    let channel = {}
-    channel[event.target.dataset["id"]] = event.target.value;
+    const target = event.target;
+    textForNextSibling(target, target.value);
+    
+    const id = target.dataset["id"];
+    if (!id) {
+        return;
+    }
 
-    sendAction("light", {channel});
+    sendAction("light", {
+        channel: {
+            [id]: target.value
+        }
+    });
 }
 
+/** @param {Event} event */
 function onBrightnessSliderChange(event) {
-    event.target.nextElementSibling.textContent = event.target.value;
+    if (!(event.target instanceof HTMLInputElement)) {
+        return;
+    }
+
+    textForNextSibling(event.target, event.target.value);
     sendAction("light", {brightness: event.target.value});
 }
 
 function initBrightness() {
     const template = loadTemplate("brightness-control");
 
-    const slider = template.getElementById("brightness-value");
-    slider.addEventListener("change", onBrightnessSliderChange);
+    const elem = template.getElementById("brightness-value");
+    elem?.addEventListener("change", onBrightnessSliderChange);
 
-    mergeTemplate(document.getElementById("light-brightness"), template);
+    mergeTemplate(
+        /** @type {!HTMLElement} */
+        (document.getElementById("light-brightness")), template);
 }
 
+/** @param {number} value */
 function updateBrightness(value) {
-    const brightness = document.getElementById("brightness-value");
-    if (brightness !== null) {
-        brightness.value = value;
-        brightness.nextElementSibling.textContent = value;
+    const elem = document.getElementById("brightness-value");
+    if (elem instanceof HTMLInputElement) {
+        elem.value = value.toString();
+        textForNextSibling(elem, elem.value);
     }
 }
 
+/** @param {string[]} channels */
 function initChannels(channels) {
     const container = document.getElementById("light-channels");
+    if (!container) {
+        return;
+    }
+
+    /** @type {import('./settings.mjs').EnumerableEntry[]} */
     const enumerables = [];
 
     channels.forEach((tag, channel) => {
         const line = loadTemplate("channel-control");
-        line.querySelector("span.slider").dataset["id"] = channel;
-        line.querySelector("div").setAttribute("id", `light-channel-${tag.toLowerCase()}`);
 
-        const slider = line.querySelector("input.slider");
-        slider.dataset["id"] = channel;
+        const [root] = line.querySelectorAll("div");
+        root.setAttribute("id", `light-channel-${tag.toLowerCase()}`);
+
+        const name =
+            `Channel #${channel} (${tag.toUpperCase()})`;
+
+        const [label] = line.querySelectorAll("label");
+        label.textContent = name;
+
+        enumerables.push({"id": channel, "name": name});
+
+        const [span] = line.querySelectorAll("span");
+        span.dataset["id"] = channel.toString();
+
+        const [slider] = line.querySelectorAll("input");
+        slider.dataset["id"] = channel.toString();
         slider.addEventListener("change", onChannelSliderChange);
 
-        const label = `Channel #${channel} (${tag.toUpperCase()})`;
-        line.querySelector("label").textContent = label;
         mergeTemplate(container, line);
-
-        enumerables.push({"id": channel, "name": label});
     });
 
     addEnumerables("Channels", enumerables);
 }
 
+/** @param {number[]} values */
 function updateChannels(values) {
     const container = document.getElementById("light");
     if (!container) {
@@ -264,15 +408,18 @@ function updateChannels(values) {
 
     values.forEach((value, channel) => {
         const slider = container.querySelector(`input.slider[data-id='${channel}']`);
-        if (!slider) {
+        if (!(slider instanceof HTMLInputElement)) {
             return;
         }
 
-        slider.value = value;
-        slider.nextElementSibling.textContent = value;
+        slider.value = value.toString();
+        textForNextSibling(slider, slider.value);
     });
 }
 
+/**
+ * @returns {import('./settings.mjs').KeyValueListeners}
+ */
 function listeners() {
     return {
         "light": (_, value) => {

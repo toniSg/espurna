@@ -25,6 +25,15 @@ beforeAll(async () => {
         </fieldset>
     </template>
     `;
+
+    document.body.innerHTML += `
+    <template id="template-number-input">
+        <div class="pure-control-group">
+            <label></label>
+            <input type="number" min="0">
+        </div>
+    </template>
+    `;
 });
 
 test('basic template fragment', () => {

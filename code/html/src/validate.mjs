@@ -1,5 +1,9 @@
 import { isChangedElement } from './settings.mjs';
 
+/**
+ * @param {string} password
+ * @returns {boolean}
+ */
 export function validatePassword(password) {
     // http://www.the-art-of-web.com/javascript/validate-password/
     // at least one lowercase and one uppercase letter or number
@@ -17,24 +21,34 @@ export function validatePassword(password) {
         && Pattern.test(password));
 }
 
-// Try to validate 'adminPass{0,1}', searching the first form containing both.
-// In case it's default webMode, avoid checking things when both fields are empty (`required === false`)
-export function validateFormsPasswords(forms, required) {
-    let [passwords] = Array.from(forms).filter(
-        form => form.elements.adminPass0 && form.elements.adminPass1);
+/**
+ * Try to validate 'adminPass{0,1}', searching the first form containing both.
+ * In case it's default webMode, avoid checking things when both fields are empty (`required === false`)
+ * @param {HTMLFormElement[]} forms
+ * @param {{required?: boolean, strict?: boolean}} options
+ * @returns {boolean}
+ */
+export function validateFormsPasswords(forms, {required = true, strict = true} = {}) {
+    const [first, second] = Array.from(forms)
+        .flatMap((x) => {
+            return [
+                x.elements.namedItem("adminPass0"),
+                x.elements.namedItem("adminPass1"),
+            ];
+        })
+        .filter((x) => x instanceof HTMLInputElement);
 
-    if (passwords) {
-        let first = passwords.elements.adminPass0;
-        let second = passwords.elements.adminPass1;
-
+    if (first && second) {
         if (!required && !first.value.length && !second.value.length) {
             return true;
         }
 
-        let firstValid = first.checkValidity() && validatePassword(first.value);
-        let secondValid = second.checkValidity() && validatePassword(second.value);
+        const firstValid = first.checkValidity()
+            && (!strict || validatePassword(first.value));
+        const secondValid = second.checkValidity()
+            && (!strict || validatePassword(second.value));
         if (firstValid && secondValid) {
-            if (first.value === second.value) {
+            if (first.value !== second.value) {
                 return true;
             }
 
@@ -49,8 +63,11 @@ export function validateFormsPasswords(forms, required) {
 }
 
 
-// Same as above, but only applies to the general settings page.
-// Find the first available form that contains 'hostname' input
+/**
+ * Same as above, but only applies to the general settings page.
+ * Find the first available form that contains 'hostname' input
+ * @param {HTMLFormElement[]} forms
+ */
 export function validateFormsHostname(forms) {
     // per. [RFC1035](https://datatracker.ietf.org/doc/html/rfc1035)
     // Hostname may contain:
@@ -58,7 +75,9 @@ export function validateFormsHostname(forms) {
     // - the digits '0' through '9', and the hyphen.
     // Hostname labels cannot begin or end with a hyphen.
     // No other symbols, punctuation characters, or blank spaces are permitted.
-    let [hostname] = Array.from(forms).filter(form => form.elements.hostname);
+    const [hostname] = Array.from(forms)
+        .flatMap(form => form.elements.namedItem("hostname"))
+        .filter((x) => x instanceof HTMLInputElement);
     if (!hostname) {
         return true;
     }
@@ -66,17 +85,20 @@ export function validateFormsHostname(forms) {
     // Validation pattern is attached to the element itself, so just check that.
     // (and, we also re-use the hostname for fallback SSID, thus limited to 1...32 chars instead of 1...63)
 
-    hostname = hostname.elements.hostname;
-    let result = hostname.value.length
+    const result = (hostname.value.length > 0)
         && (!isChangedElement(hostname) || hostname.checkValidity());
-
     if (!result) {
-        alert("Hostname cannot be empty and may only contain the ASCII letters ('A' through 'Z' and 'a' through 'z'), the digits '0' through '9', and the hyphen ('-')! They can neither start or end with an hyphen.");
+        alert(`Hostname cannot be empty and may only contain the ASCII letters ('A' through 'Z' and 'a' through 'z'),
+            the digits '0' through '9', and the hyphen ('-')! They can neither start or end with an hyphen.`);
     }
 
     return result;
 }
 
+/**
+ * @param {HTMLFormElement[]} forms
+ */
 export function validateForms(forms) {
-    return validateFormsPasswords(forms) && validateFormsHostname(forms);
+    return validateFormsPasswords(forms)
+        && validateFormsHostname(forms);
 }

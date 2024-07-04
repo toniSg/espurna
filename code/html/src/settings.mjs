@@ -31,28 +31,6 @@ function resetGroupPending(elem) {
     elem.dataset["settingsGroupPending"] = "";
 }
 
-// TODO: note that we also include kv schema as 'data-settings-schema' on the container.
-// produce a 'set' and compare instead of just matching length?
-
-/**
- * @param {string[]} source
- * @param {string[]} schema
- * @returns {{[k: string]: any}}
- */
-export function fromSchema(source, schema) {
-    if (schema.length !== source.length) {
-        throw `Schema mismatch! Expected length ${schema.length} vs. ${source.length}`;
-    }
-
-    /** @type {{[k: string]: string}} */
-    let target = {};
-    schema.forEach((key, index) => {
-        target[key] = source[index];
-    });
-
-    return target;
-}
-
 // Right now, group additions happen from:
 // - WebSocket, likely to happen exactly once per connection through processData handler(s). Specific keys trigger functions that append into the container element.
 // - User input. Same functions are triggered, but with an additional event for the container element that causes most recent element to be marked as changed.
@@ -270,7 +248,7 @@ function groupSettingsCheckMax(event) {
     const max = target.dataset["settingsMax"];
     const val = 1 + target.children.length;
 
-    if ((max !== undefined) && (parseInt(max, 10) < val)) {
+    if ((max !== undefined) && (max !== "0") && (parseInt(max, 10) < val)) {
         alert(`Max number of ${target.id} has been reached (${val} out of ${max})`);
         return false;
     }
@@ -279,21 +257,31 @@ function groupSettingsCheckMax(event) {
 }
 
 /**
- * @param {string} elementId
+ * @param {HTMLElement} elem
  * @param {EventListener} listener
  */
-export function groupSettingsOnAdd(elementId, listener) {
-    document.getElementById(elementId)
-        ?.addEventListener("settings-group-add",
-            (event) => {
-                event.stopPropagation();
-                if (!groupSettingsCheckMax(event)) {
-                    return;
-                }
+export function groupSettingsOnAddElem(elem, listener) {
+    elem.addEventListener("settings-group-add",
+        (event) => {
+            event.stopPropagation();
+            if (!groupSettingsCheckMax(event)) {
+                return;
+            }
 
-                listener(event);
-                onGroupSettingsEventAdd(event);
-            });
+            listener(event);
+            onGroupSettingsEventAdd(event);
+        });
+}
+
+/**
+ * @param {string} id
+ * @param {EventListener} listener
+ */
+export function groupSettingsOnAdd(id, listener) {
+    const elem = document.getElementById(id);
+    if (elem) {
+        groupSettingsOnAddElem(elem, listener);
+    }
 }
 
 /**
@@ -1225,12 +1213,7 @@ export function pendingChanges() {
     return Settings.counters.changed > 0;
 }
 
-/**
- * TODO https://github.com/microsoft/TypeScript/issues/58969 ? at-import becomes 'unused' for some reason
- * @typedef {import("./question.mjs").QuestionWrapper} QuestionWrapper
- */
-
-/** @type {QuestionWrapper} */
+/** @type {import("./question.mjs").QuestionWrapper} */
 export function askSaveSettings(ask) {
     if (pendingChanges()) {
         return ask("There are pending changes to the settings, continue the operation without saving?");
