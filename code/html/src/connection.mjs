@@ -90,9 +90,14 @@ ConnectionBase.prototype.open = function(urls, onmessage) {
 
 /**
  * @param {string} payload
+ * @throws {Error}
  */
 ConnectionBase.prototype.send = function(payload) {
-    this?._socket?.send(payload);
+    if (!this._socket) {
+        throw new Error("WebSocket disconnected!");
+    }
+
+    this._socket.send(payload);
 }
 
 const Connection = new ConnectionBase();

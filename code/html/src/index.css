@@ -228,7 +228,8 @@ label {
 .button-clear-filters,
 .button-clear-messages,
 .button-clear-counts,
-.button-settings-factory {
+.button-settings-factory,
+.button-setup-password.button-setup-lenient {
     background: rgb(192, 0, 0); /* redish */
 }
 

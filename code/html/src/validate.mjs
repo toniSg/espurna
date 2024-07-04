@@ -14,10 +14,8 @@ export function validatePassword(password) {
     // https://github.com/xoseperez/espurna/issues/1151
 
     const Pattern = /^(?=.*[A-Z\d])(?=.*[a-z])[\w~!@#$%^&*()<>,.?;:{}[\]\\|]{8,63}/;
-    return (
-        (password !== undefined)
-        && (typeof password === "string")
-        && (password.length > 0)
+    return ((typeof password === "string")
+        && (password.length >= 8)
         && Pattern.test(password));
 }
 
@@ -43,25 +41,25 @@ export function validateFormsPasswords(forms, {required = true, strict = true} =
             return true;
         }
 
-        const firstValid = first.checkValidity()
-            && (!strict || validatePassword(first.value));
-        const secondValid = second.checkValidity()
-            && (!strict || validatePassword(second.value));
-        if (firstValid && secondValid) {
-            if (first.value !== second.value) {
-                return true;
-            }
-
+        if (first.value !== second.value) {
             alert("Passwords are different!");
             return false;
         }
 
-        alert("The password you have entered is not valid, it must be 8..63 characters and have at least 1 lowercase and 1 uppercase / number!");
+        const firstValid = first.checkValidity()
+            && (!strict || validatePassword(first.value));
+        const secondValid = second.checkValidity()
+            && (!strict || validatePassword(second.value));
+
+        if (firstValid && secondValid) {
+            return true;
+        }
     }
+
+    alert(`Invalid password!`);
 
     return false;
 }
-
 
 /**
  * Same as above, but only applies to the general settings page.
@@ -99,6 +97,6 @@ export function validateFormsHostname(forms) {
  * @param {HTMLFormElement[]} forms
  */
 export function validateForms(forms) {
-    return validateFormsPasswords(forms)
+    return validateFormsPasswords(forms, {strict: false})
         && validateFormsHostname(forms);
 }

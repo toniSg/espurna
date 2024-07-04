@@ -4,14 +4,6 @@ import { sendAction } from './connection.mjs';
 import { mergeTemplate, loadTemplate } from './template.mjs';
 import { addEnumerables, variableListeners } from './settings.mjs';
 
-/** @param {function(HTMLElement): void} callback */
-function withPicker(callback) {
-    const elem = document.getElementById("light-picker");
-    if (elem) {
-        callback(elem);
-    }
-}
-
 /**
  * @param {iro.Color} color
  * @returns {string}
@@ -56,6 +48,12 @@ function colorBox() {
     return {component: iro.ui.Box, options: {}};
 }
 
+/** @param {function(HTMLElement): void} callback */
+function withPicker(callback) {
+    callback(/** @type {!HTMLElement} */
+        (document.getElementById("light-picker")));
+}
+
 /**
  * @param {"rgb" | "hsv"} mode
  * @param {string} value
@@ -64,10 +62,7 @@ function colorUpdate(mode, value) {
     withPicker((elem) => {
         elem.dispatchEvent(
             new CustomEvent("color:string", {
-                detail: {
-                    mode: mode,
-                    value: value,
-                }}));
+                detail: {mode, value}}));
     });
 }
 
@@ -80,46 +75,33 @@ function lightStateHideRelay(id) {
 
 /** @param {function(HTMLInputElement): void} callback */
 function withState(callback) {
-    const elem = document.getElementById("light-state-value");
-    if (elem instanceof HTMLInputElement) {
-        callback(elem);
-    }
+    callback(/** @type {!HTMLInputElement} */
+        (document.querySelector("input[name=light-state-value]")));
 }
 
 function initLightState() {
     withState((elem) => {
         elem.addEventListener("change", (event) => {
             event.preventDefault();
-            sendAction("light", {state: /** @type {!HTMLInputElement} */(event.target).checked});
+            const state = /** @type {!HTMLInputElement} */
+                (event.target).checked;
+            sendAction("light", {state});
         });
 
     });
 }
 
 /** @param {boolean} value */
-function colorPickerState(value) {
-    const light = /** @type {!HTMLElement} */
-        (document.getElementById("light"));
-    if (value) {
-        light.classList.add("light-on");
-    } else {
-        light.classList.remove("light-on");
-    }
-}
-
-/** @param {boolean} value */
 function updateLightState(value) {
     withState((elem) => {
         elem.checked = value;
-        colorPickerState(value);
+        lightClass(value, "light-on");
     });
 }
 
 /** @param {boolean} value */
 function colorEnabled(value) {
-    if (value) {
-        lightAddClass("light-color");
-    }
+    lightClass(value, "light-color");
 }
 
 /** @param {boolean} value */
@@ -162,9 +144,8 @@ function colorInit(value) {
     styleInject(rules);
 
     withPicker((elem) => {
-        // TODO tsserver does not like the resulting type
-        const picker = new /** @type {any} */
-            (iro.ColorPicker(elem, {layout}));
+        // TODO w/ the current bundle, this is not a ctor
+        const picker = iro.ColorPicker(elem, {layout});
         picker.on("input:change", change);
 
         elem.addEventListener("color:string", (event) => {
@@ -219,10 +200,24 @@ function updateMireds(value) {
     });
 }
 
-/** @param {string} className */
-function lightAddClass(className) {
-    const light = document.getElementById("light");
-    light?.classList?.add(className);
+/** @param {function(HTMLElement): void} callback */
+function withLight(callback) {
+    callback(/** @type {!HTMLElement} */
+        (document.getElementById("light")));
+}
+
+/**
+ * @param {boolean} value
+ * @param {string} className
+ */
+function lightClass(value, className) {
+    withLight((elem) => {
+        if (value) {
+            elem.classList.add(className);
+        } else {
+            elem.classList.remove(className);
+        }
+    });
 }
 
 /**
@@ -230,9 +225,7 @@ function lightAddClass(className) {
  * @param {boolean} value
  */
 function whiteEnabled(value) {
-    if (value) {
-        lightAddClass("light-white");
-    }
+    lightClass(value, "light-white");
 }
 
 /**
@@ -240,9 +233,7 @@ function whiteEnabled(value) {
  * @param {boolean} value
  */
 function cctEnabled(value) {
-    if (value) {
-        lightAddClass("light-cct");
-    }
+    lightClass(value, "light-cct");
 }
 
 /** @param {{cold: number, warm: number}} value */

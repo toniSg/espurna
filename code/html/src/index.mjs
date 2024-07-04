@@ -298,7 +298,7 @@ function listeners() {
 function generatePassword() {
     let password = "";
     do {
-        password = randomString(10);
+        password = randomString(10, {special: true});
     } while (!validatePassword(password));
 
     return password;
@@ -310,28 +310,37 @@ function generatePassword() {
 function generatePasswordsForForm(form) {
     const value = generatePassword();
 
-    for (let name of ["adminPass0", "adminPass1"]) {
-        const elem = form.elements.namedItem(name);
-        if (elem && elem instanceof HTMLInputElement) {
+    ["adminPass0", "adminPass1"]
+        .map((x) => form.elements.namedItem(x))
+        .filter((x) => x instanceof HTMLInputElement)
+        .forEach((elem) => {
             setChangedElement(elem);
             elem.type = "text";
             elem.value = value;
-        }
-    }
+        });
 }
 
 /**
  * @param {HTMLFormElement} form
  */
 function initSetupPassword(form) {
-    document.querySelector(".button-setup-password")
-        ?.addEventListener("click", (event) => {
-            event.preventDefault();
-            const forms = [form];
-            if (validateFormsPasswords(forms, true)) {
-                applySettings(getData(forms, {cleanup: false}));
-            }
+    document.querySelectorAll(".button-setup-password")
+        .forEach((elem) => {
+            elem.addEventListener("click", (event) => {
+                event.preventDefault();
+
+                const target = /** @type {HTMLInputElement} */
+                    (event.target);
+                const lenient = target.classList
+                    .contains("button-setup-lenient");
+
+                const forms = [form];
+                if (validateFormsPasswords(forms, {strict: !lenient})) {
+                    applySettings(getData(forms, {cleanup: false}));
+                }
+            });
         });
+
     document.querySelector(".button-generate-password")
         ?.addEventListener("click", (event) => {
             event.preventDefault();

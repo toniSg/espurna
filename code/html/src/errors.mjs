@@ -28,26 +28,31 @@ export function showNotification(text) {
     }
 
     __errors += 1;
+    text += "\n\nFor more info see the Debug Log and / or Developer Tools console.";
 
-    if (container.lastChild) {
-        container.lastChild.textContent =
-            `\n(${__errors} unhandled errors so far)`;
-        return;
+    if (0 === container.childElementCount) {
+        container.style.display = "inherit";
+        container.style.whiteSpace = "pre-wrap";
+
+        const head = document.createElement("div");
+        head.classList.add("pure-u-1");
+        head.classList.add("pure-u-lg-1");
+
+        head.textContent = text;
+
+        const tail = document.createElement("div");
+        tail.classList.add("pure-u-1");
+        tail.classList.add("pure-u-lg-1");
+
+        container.appendChild(head);
+        container.appendChild(tail);
     }
 
-    container.style.display = "inherit";
-    container.style.whiteSpace = "pre-wrap";
-
-    const head = document.createElement("div");
-    head.classList.add("pure-u-1");
-    head.classList.add("pure-u-lg-1");
-
-    text += "\n\nFor more info see the Debug Log and / or Developer Tools console.";
-    head.textContent = text;
-
-    const tail = document.createElement("div");
-    container.appendChild(head);
-    container.appendChild(tail);
+    container.children[0].textContent = text;
+    if (0 !== container.childElementCount) {
+        container.children[1].textContent =
+            `\n(${__errors} unhandled errors so far)`;
+    }
 }
 
 /**
