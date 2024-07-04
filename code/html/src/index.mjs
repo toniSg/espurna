@@ -1,7 +1,10 @@
 /// <reference path="index.build.d.mts" />
 
 import { notifyError, notifyErrorEvent } from './errors.mjs';
-window.addEventListener("error", notifyErrorEvent);
+window.addEventListener("error", (event) => {
+    notifyErrorEvent(event);
+    console.error(event.error);
+});
 
 import {
     pageReloadIn,

@@ -494,6 +494,11 @@ input[disabled].checkbox-toggle {
     display: none;
 }
 
+#error-notification.show-error {
+    display: inherit;
+    white-space: pre-wrap;
+}
+
 /* -----------------------------------------------------------------------------
     Wifi panel
    -------------------------------------------------------------------------- */

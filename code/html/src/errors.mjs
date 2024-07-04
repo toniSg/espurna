@@ -1,3 +1,5 @@
+import { loadTemplate, mergeTemplate } from './template.mjs';
+
 /**
  * @param {Error} error
  * @returns {string}
@@ -31,21 +33,9 @@ export function showNotification(text) {
     text += "\n\nFor more info see the Debug Log and / or Developer Tools console.";
 
     if (0 === container.childElementCount) {
-        container.style.display = "inherit";
-        container.style.whiteSpace = "pre-wrap";
-
-        const head = document.createElement("div");
-        head.classList.add("pure-u-1");
-        head.classList.add("pure-u-lg-1");
-
-        head.textContent = text;
-
-        const tail = document.createElement("div");
-        tail.classList.add("pure-u-1");
-        tail.classList.add("pure-u-lg-1");
-
-        container.appendChild(head);
-        container.appendChild(tail);
+        container.classList.add("show-error");
+        mergeTemplate(
+            container, loadTemplate("error-notification"));
     }
 
     container.children[0].textContent = text;
