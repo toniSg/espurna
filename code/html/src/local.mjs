@@ -51,7 +51,7 @@ export function init() {
                 'relayTopicMode',
                 'relayMqttDisc',
             ],
-            relays: [
+            values: [
                 ['111', 'gpio', 0, 1, 4, 153, 0, 0, 0, 0, 0, '', '', 0, 0],
                 ['222', 'gpio', 0, 1, 5, 153, 0, 0, 0, 0, 0, '', '', 0, 0],
                 ['333', 'gpio', 0, 1, 12, 153, 0, 0, 0, 0, 0, '', '', 0, 0],
@@ -215,6 +215,29 @@ export function init() {
                 [[3, 'K']],
             ],
         },
+        'magnitudes-settings': {
+            values: [
+                [0,null,"NaN",0,0],
+                [0,null,"NaN",0,0],
+                [0,null,"NaN",0,0],
+                [0,null,"NaN",0,0],
+                [null,null,"NaN",0,0],
+                [null,1,"NaN",0,0],
+                [null,null,"NaN",0,0]
+            ],
+            schema: [
+                "Correction",
+                "Ratio",
+                "ZeroThreshold",
+                "MinDelta",
+                "MaxDelta"
+            ]
+        },
+        snsRealTime: false,
+        snsRead: 6,
+        snsInit: 10,
+        snsReport: 10,
+        snsSave: 0,
         thermostatMode: true,
         thermostatTmpUnits: 'C',
         thermostatOperationMode: 'local window',
@@ -238,6 +261,22 @@ export function init() {
     });
 
     updateVariables({
+        'magnitudes-module': {
+            prefix: "dcz",
+            values: [
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+            ],
+            schema: [
+                "type",
+                "index_global",
+                "index_module"
+            ]
+        },
+    });
+
+    updateVariables({
         'magnitudes-list': {
             schema: [
                 'index_global',
@@ -246,9 +285,9 @@ export function init() {
                 'units',
             ],
             values: [
-                [0, 0, "Foo measurements", 1],
-                [0, 1, "Bar simulation", 2],
-                [0, 2, "Baz calculation", 2],
+                [0, 1, "Foo measurements", 1],
+                [0, 2, "Bar simulation", 2],
+                [0, 3, "Baz calculation", 2],
             ],
         },
     });
@@ -261,9 +300,9 @@ export function init() {
                 'error',
             ],
             values: [
-                [23, 1, 0],
-                [98, 2, 0],
-                [296, 3, 99],
+                ["23", 1, 0],
+                ["98", 2, 0],
+                ["296", 3, 99],
             ],
         },
         relayState: {
@@ -271,7 +310,7 @@ export function init() {
                 'status',
                 'lock',
             ],
-            relays: [
+            values: [
                 [0, 0],
                 [1, 2],
                 [0, 1],
@@ -283,6 +322,13 @@ export function init() {
 
     for (let n = 100; n < 200; n += 15) {
         updateVariables({
+            scanResult: [
+                'aa:bb:cc:ee:ff',
+                `WPA${n / 100}PSK`,
+                -Math.ceil(100 * Math.random()),
+                Math.ceil(Math.random() * 13),
+                `FooBar${n / 50}`,
+            ],
             rfm69: {
                 message: [
                     n,
