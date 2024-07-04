@@ -4,22 +4,13 @@ import {
 } from './settings.mjs';
 
 import { addFromTemplate, addFromTemplateWithSchema } from './template.mjs';
-import { moreElem } from './core.mjs';
+import { lastMoreElem } from './core.mjs';
 import { sendAction } from './connection.mjs';
 
 /** @param {function(HTMLElement): void} callback */
 function withNetworks(callback) {
     callback(/** @type {!HTMLElement} */
         (document.getElementById("networks")));
-}
-
-/**
- * @param {HTMLElement} elem
- */
-function lastMoreElem(elem) {
-    if (elem.lastChild instanceof HTMLElement) {
-        moreElem(elem.lastChild)
-    }
 }
 
 /**

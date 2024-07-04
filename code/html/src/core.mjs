@@ -33,7 +33,7 @@ export function styleVisible(selector, value) {
  * @param {number} timeout
  */
 export function pageReloadIn(timeout) {
-    setTimeout(window.location.reload, timeout);
+    setTimeout(() => window.location.reload(), timeout);
 }
 
 /**
@@ -49,6 +49,15 @@ export function moreElem(container) {
             elem.style.display = (elem.style.display === "")
                 ? "inherit" : "";
         });
+}
+
+/**
+ * @param {HTMLElement} elem
+ */
+export function lastMoreElem(elem) {
+    if (elem.lastChild instanceof HTMLElement) {
+        moreElem(elem.lastChild)
+    }
 }
 
 /**

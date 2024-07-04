@@ -66,26 +66,58 @@ class ConnectionBase {
 };
 
 /**
- * @typedef {function(MessageEvent): any} OnMessage
+ * @callback OnMessage
+ * @param {MessageEvent} event
+ * @param {ConnectionBase} connection
+ * @returns {any}
+ */
+
+/**
+ * @callback OnOpen
+ * @param {Event} event
+ * @param {ConnectionBase} connection
+ * @returns {any}
+ */
+
+/**
+ * @callback OnClose
+ * @param {CloseEvent} event
+ * @param {ConnectionBase} connection
+ * @returns {any}
+ */
+
+/**
+ * @typedef {{onmessage?: OnMessage | null, onopen?: OnOpen | null, onclose?: OnClose | null}} ConnectionOptions
  */
 
 /**
  * @param {ConnectionUrls} urls
- * @param {OnMessage} onmessage
+ * @param {ConnectionOptions} options
  */
-ConnectionBase.prototype.open = function(urls, onmessage) {
+ConnectionBase.prototype.open = function(urls, {onopen = null, onclose = null, onmessage = null} = {}) {
     this._socket = new WebSocket(urls.ws.href);
-    this._socket.onopen = () => {
+    this._socket.onopen = (event) => {
         this._ping_pong = setInterval(
             () => { sendAction("ping"); }, 5000);
+        if (onopen) {
+            onopen(event, this);
+        }
     };
-    this._socket.onclose = () => {
+    this._socket.onclose = (event) => {
         if (this._ping_pong) {
             clearInterval(this._ping_pong);
             this._ping_pong = null;
         }
+        if (onclose) {
+            return onclose(event, this);
+        }
     };
-    this._socket.onmessage = onmessage;
+
+    if (onmessage) {
+        this._socket.onmessage = (event) => {
+            return onmessage(event, this);
+        };
+    }
 }
 
 /**
@@ -118,10 +150,10 @@ export function connectionUrls() {
 
 /**
  * @param {ConnectionUrls} urls
- * @param {OnMessage} onmessage
+ * @param {ConnectionOptions} options
  */
-function onAuthorized(urls, onmessage) {
-    Connection.open(urls, onmessage);
+function onAuthorized(urls, options) {
+    Connection.open(urls, options);
 }
 
 /**
@@ -142,9 +174,9 @@ function onError(response) {
 
 /**
  * @param {URL} root
- * @param {OnMessage} onmessage
+ * @param {ConnectionOptions} options
  */
-async function connectToURL(root, onmessage) {
+async function connectToURL(root, options) {
     const urls = makeConnectionUrls(root);
 
     /** @type {RequestInit} */
@@ -158,7 +190,7 @@ async function connectToURL(root, onmessage) {
         const response = await fetch(urls.auth.href, opts);
         // Set up socket connection handlers
         if (response.status === 200) {
-            onAuthorized(urls, onmessage);
+            onAuthorized(urls, options);
         // Nothing to do, reload page and retry on errors
         } else {
             onError(response);
@@ -170,10 +202,10 @@ async function connectToURL(root, onmessage) {
 
 /** @param {Event} event */
 async function onConnectEvent(event) {
-    const detail = /** @type {CustomEvent<{url: URL, onmessage: OnMessage}>} */
+    const detail = /** @type {CustomEvent<{url: URL, options: ConnectionOptions}>} */
         (event).detail;
     await connectToURL(
-        detail.url, detail.onmessage);
+        detail.url, detail.options);
 }
 
 /** @param {Event} event */
@@ -196,8 +228,8 @@ export function sendAction(action, data = {}) {
     send(JSON.stringify({action, data}));
 }
 
-/** @param {OnMessage} onmessage */
-export function connect(onmessage) {
+/** @param {ConnectionOptions} options */
+export function connect(options) {
     // Optionally, support host=... param that could redirect to somewhere else
     // Note of the Cross-Origin rules that apply, and require device to handle them
     const search = new URLSearchParams(window.location.search);
@@ -209,7 +241,7 @@ export function connect(onmessage) {
 
     const url = (host) ? new URL(host) : window.location;
     window.dispatchEvent(
-        new CustomEvent("app-connect", {detail: {url, onmessage}}));
+        new CustomEvent("app-connect", {detail: {url, options}}));
 }
 
 export function init() {

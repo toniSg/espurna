@@ -235,6 +235,14 @@ function askReboot(ask) {
     return ask("Are you sure you want to reboot the device?");
 }
 
+/** @param {CloseEvent} event */
+function askReload(event) {
+    /** @type {QuestionWrapper} */
+    return function(ask) {
+        return ask(`Connection lost with the device - ${event.reason}. Click OK to refresh the page.`);
+    };
+}
+
 function askAndCallReconnect() {
     askAndCall([askSaveSettings, askDisconnect], () => {
         sendAction("reconnect");
@@ -388,6 +396,15 @@ function onPasswordRevealClick(event) {
 }
 
 /**
+ * @param {CloseEvent} event
+ */
+function onConnectionClose(event) {
+    askAndCall([askReload(event)], () => {
+        pageReloadIn(1000);
+    });
+}
+
+/**
  * @param {MessageEvent<any>} event
  */
 function onJsonPayload(event) {
@@ -532,7 +549,7 @@ function init() {
     }
 
     // don't autoconnect w/ localhost or file://
-    connect(onJsonPayload);
+    connect({onclose: onConnectionClose, onmessage: onJsonPayload});
 }
 
 document.addEventListener("DOMContentLoaded", init);
