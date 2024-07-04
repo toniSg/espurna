@@ -399,6 +399,9 @@ function onJsonPayload(event) {
     try {
         const parsed = JSON.parse(
             event.data
+                .replace(/:Infinity/g, ':"inf"')
+                .replace(/:-Infinity/g, ':"-inf"')
+                .replace(/:NaN/g, ':"nan"')
                 .replace(/\n/g, "\\n")
                 .replace(/\r/g, "\\r")
                 .replace(/\t/g, "\\t"));
