@@ -219,7 +219,7 @@ label {
 
 .button-reboot,
 .button-reconnect,
-.button-ha-clear,
+.button-ha-enabled,
 .button-rfb-forget,
 .button-lightfox-clear,
 .button-del-settings-group,
@@ -238,7 +238,7 @@ label {
 .button-upgrade-browse,
 .button-rfb-learn,
 .button-lightfox-learn,
-.button-ha-publish,
+.button-ha-disabled,
 .button-settings-backup,
 .button-settings-restore,
 .button-garland-set-default,
