@@ -447,7 +447,7 @@ function init() {
     // Sidebar menu & buttons
     document.querySelector(".menu-link")
         ?.addEventListener("click", onMenuLinkClick);
-    document.querySelectorAll(".pure-menu-link")
+    document.querySelectorAll("[data-panel]")
         .forEach((elem) => {
             elem.addEventListener("click", onPanelTargetClick);
         });

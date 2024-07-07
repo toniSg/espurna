@@ -1,7 +1,6 @@
 import { sendAction } from './connection.mjs';
 
 import {
-    onPanelTargetClick,
     showPanelByName,
     styleInject,
     styleVisible,
@@ -565,8 +564,6 @@ function listeners() {
 export function init() {
     variableListeners(listeners());
 
-    document.querySelector(".button-emon-expected")
-        ?.addEventListener("click", onPanelTargetClick);
     document.querySelector(".button-emon-expected-calculate")
         ?.addEventListener("click", emonCalculateRatios);
     document.querySelector(".button-emon-expected-apply")
