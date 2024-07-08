@@ -12,6 +12,7 @@ export default [
         },
         rules: {
             ...js.configs.recommended.rules,
+            "no-throw-literal": "error",
             "no-unused-vars": ["error", {
                 "argsIgnorePattern": "^_",
             }],
@@ -35,8 +36,6 @@ export default [
                 "MODULE_LIGHTFOX": "readonly",
                 "MODULE_LOCAL": "readonly",
                 "MODULE_OTA": "readonly",
-                "MODULE_RELAY": "readonly",
-                "MODULE_RELAY": "readonly",
                 "MODULE_RELAY": "readonly",
                 "MODULE_RFB": "readonly",
                 "MODULE_RFM69": "readonly",

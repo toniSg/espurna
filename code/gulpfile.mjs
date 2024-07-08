@@ -42,6 +42,12 @@ import * as convert from 'convert-source-map';
 import * as through from 'through2';
 import fancyLog from 'fancy-log';
 
+import {
+    FileSystemConfigLoader,
+    HtmlValidate,
+    formatterFactory,
+} from 'html-validate';
+
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
@@ -174,7 +180,7 @@ const STATIC_DIR = path.join('espurna', 'static');
 function toMinifiedHtml(options) {
     return through.obj(async function (/** @type {File} */source, _, callback) {
         if (!source.contents) {
-            throw 'expecting non-empty source contents';
+            throw new Error('expecting non-empty source contents');
         }
 
         const contents = source.contents.toString();
@@ -201,7 +207,7 @@ function safename(name) {
 function toHeader(name) {
     return through.obj(function (/** @type {File} */source, _, callback) {
         if (!(source.contents instanceof Buffer)) {
-            throw 'expecting source contents to be a buffer!';
+            throw new Error('expecting source contents to be a buffer!');
         }
 
         let output = `alignas(4) static constexpr uint8_t ${safename(name)}[] PROGMEM = {`;
@@ -340,7 +346,7 @@ function inlineHandler(srcdir, modules, compress) {
                 source.fileContent,
                 srcdir, define, compress);
             if (!result.outputFiles.length) {
-                throw 'js bundle cannot be empty';
+                throw new Error('js bundle cannot be empty');
             }
 
             let content = Buffer.from(result.outputFiles[0].contents);
@@ -382,7 +388,7 @@ function inlineHandler(srcdir, modules, compress) {
 function modifyHtml(handlers) {
     return through.obj(function (/** @type {File} */source, _, callback) {
         if (!(source.contents instanceof Buffer)) {
-            throw 'expecting source contents to be a buffer!';
+            throw new Error('expecting source contents to be a buffer!');
         }
 
         const dom = new JSDOM(source.contents, {includeNodeLocations: true});
@@ -518,6 +524,26 @@ function stripModules(modules) {
     }
 }
 
+function validateHtml() {
+    return through.obj(async function (/** @type {File} */source, _, callback) {
+        if (!source.contents) {
+            throw new Error('expecting non-empty source contents');
+        }
+
+        const validate = new HtmlValidate(new FileSystemConfigLoader());
+
+        const report = await validate.validateString(
+            source.contents.toString());
+        if (!report.valid) {
+            const asText = formatterFactory('text');
+            console.error(asText(report.results));
+            throw new Error('html validation failed');
+        }
+
+        callback(null, source);
+    });
+}
+
 /**
  * inline every external resource in the entrypoint.
  * works outside of gulp context, so used sources are only known after this is actually called
@@ -533,7 +559,7 @@ function makeInlineSource(srcdir, modules, compress) {
             return;
         }
 
-        const result = await inlineSource(
+        const contents = await inlineSource(
             source.contents.toString(),
             {
                 'compress': compress,
@@ -541,7 +567,7 @@ function makeInlineSource(srcdir, modules, compress) {
                 'rootpath': srcdir,
             });
 
-        source.contents = Buffer.from(result);
+        source.contents = Buffer.from(contents);
         callback(null, source);
     });
 }
@@ -554,7 +580,7 @@ function makeInlineSource(srcdir, modules, compress) {
 function replace(lhs, rhs) {
     return through.obj(function (/** @type {File} */source, _, callback) {
         if (!(source.contents instanceof Buffer)) {
-            throw 'expecting source contents to be a buffer!';
+            throw new Error('expecting source contents to be a buffer!');
         }
 
         const before = source.contents.toString();
@@ -577,7 +603,7 @@ function buildHtml(name, modules, compress = true) {
     }
 
     if (modules === undefined) {
-        throw `'modules' argument / NAMED_BUILD['${name}'] is missing`;
+        throw new Error(`'modules' argument / NAMED_BUILD['${name}'] is missing`);
     }
 
     const out = source(ENTRYPOINT)
@@ -586,7 +612,8 @@ function buildHtml(name, modules, compress = true) {
             injectVendor(compress),
             stripModules(modules),
             externalBlank(),
-        ]));
+        ]))
+        .pipe(validateHtml());
 
     if (compress) {
         return out.pipe(
