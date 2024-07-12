@@ -137,3 +137,27 @@ export function randomString(length, {hex = false, lowercase = true, numbers = t
 
     return result.join("");
 }
+
+/**
+ * @throws {Error}
+ * @param {boolean} value
+ * @param {string} message
+ * @returns {asserts value}
+ */
+export function assert(value, message = "") {
+    if (!value) {
+        throw new Error(message ?? "assertion failed");
+    }
+}
+
+/**
+ * @template T
+ * @param {T[]} values
+ * @param {function(T): boolean} callback
+ * @returns {number}
+ */
+export function count(values, callback) {
+    return values
+        .map((value) => /** @type {number} */(callback(value) ? 1 : 0))
+        .reduce((lhs, rhs) => lhs + rhs, 0);
+}

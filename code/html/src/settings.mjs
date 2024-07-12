@@ -1,5 +1,5 @@
 import { notifyError } from './errors.mjs';
-import { pageReloadIn } from './core.mjs';
+import { pageReloadIn, count } from './core.mjs';
 import { send, sendAction, connectionUrls } from './connection.mjs';
 import { validateForms } from './validate.mjs';
 
@@ -8,6 +8,17 @@ import { validateForms } from './validate.mjs';
  */
 export function isChangedElement(elem) {
     return stringToBoolean(elem.dataset["changed"] ?? "");
+}
+
+/**
+ * @param {Element} node
+ */
+export function countChangedElements(node) {
+    const elems = /** @type {Array<InputOrSelect>} */
+        (Array.from(node.querySelectorAll(
+            "input[data-changed],select[data-changed]")));
+
+    return count(elems, isChangedElement);
 }
 
 /**
@@ -73,6 +84,15 @@ function groupElementInfo(target) {
 
 /**
  * @param {HTMLElement} elem
+ * @param {string[]} pending
+ */
+function setGroupPending(elem, pending) {
+    elem.dataset["settingsGroupPending"] =
+        ([...new Set(pending)]).join(" ");
+}
+
+/**
+ * @param {HTMLElement} elem
  * @returns {string[]}
  */
 function getGroupPending(elem) {
@@ -81,43 +101,7 @@ function getGroupPending(elem) {
         return [];
     }
 
-    return raw.split(",");
-}
-
-/**
- * @param {HTMLElement} elem
- * @param {number} index
- * @param {string} lhs
- * @param {string} rhs
- */
-function modifyGroupPending(elem, index, lhs, rhs) {
-    const pending = getGroupPending(elem);
-
-    const removed = pending.indexOf(`${lhs}:${index}`);
-    if (removed >= 0) {
-        pending.splice(removed, 1);
-    } else {
-        pending.push(`${rhs}:${index}`);
-    }
-
-    elem.dataset["settingsGroupPending"] = pending.join(",");
-}
-
-/**
- * @param {HTMLElement} elem
- * @param {number} index
- */
-function addGroupPending(elem, index) {
-    modifyGroupPending(elem, index, "del", "set");
-}
-
-
-/**
- * @param {HTMLElement} elem
- * @param {number} index
- */
-function popGroupPending(elem, index) {
-    modifyGroupPending(elem, index, "set", "del");
+    return raw.split(" ");
 }
 
 /**
@@ -140,14 +124,33 @@ function isIgnoredElement(elem) {
 export function groupSettingsAdd(group) {
     const index = group.children.length - 1;
     const last = group.children[index];
-    addGroupPending(group, index);
 
-    for (const target of settingsTargets(group)) {
-        const elem = last.querySelector(`[name='${target}']`);
-        if (elem instanceof HTMLElement) {
-            setChangedElement(elem);
+    const before = countChangedElements(group);
+
+    const pending = getGroupPending(group);
+    pending.push(`set:${index}`);
+    setGroupPending(group, pending);
+
+    let once = true;
+
+    for (let elem of findInputOrSelect(last)) {
+        if (once && elem.required) {
+            elem.focus();
+            elem.reportValidity();
+            once = false;
+        }
+
+        if (elem.required
+            && elem.checkValidity()
+            && (getDataForElement(elem) !== null))
+        {
+                setChangedElement(elem);
         }
     }
+
+    Settings.countFor(
+        countChangedElements(group) - before);
+    Settings.stylizeSave();
 }
 
 /**
@@ -167,11 +170,34 @@ function onGroupSettingsEventAdd(event) {
 
 /**
  * @param {HTMLElement} group
+ */
+function delGroupPending(group) {
+    const top = group.childElementCount - 1;
+    if (top < 0) {
+        return;
+    }
+
+    let pending = getGroupPending(group);
+
+    const set = pending.indexOf(`set:${top}`);
+    if (set >= 0) {
+        pending.splice(set, 1);
+    } else {
+        pending.push(`del:${top}`);
+    }
+
+    setGroupPending(group, pending);
+}
+
+/**
+ * @param {HTMLElement} group
  * @param {HTMLElement} target
  */
 export function groupSettingsDel(group, target) {
     const elems = Array.from(group.children);
     const shiftFrom = elems.indexOf(target);
+
+    const before = countChangedElements(group);
 
     const info = elems.map(groupElementInfo);
     for (let index = -1; index < info.length; ++index) {
@@ -190,11 +216,12 @@ export function groupSettingsDel(group, target) {
         }
     }
 
-    if (elems.length) {
-        popGroupPending(group, elems.length - 1);
-    }
-
+    delGroupPending(group);
     target.remove();
+
+    Settings.countFor(
+        countChangedElements(group) - before);
+    Settings.stylizeSave();
 }
 
 /**
@@ -318,9 +345,10 @@ function onGroupSettingsAddClick(event) {
 
 /**
  * @param {HTMLElement} container
+ * @param {string[]} keys
  * @returns {string[]} - key# for each node that needs removal
  */
-function groupSettingsCleanup(container) {
+function groupSettingsCleanup(container, keys) {
     /** @type {string[]} */
     const out = [];
 
@@ -329,19 +357,35 @@ function groupSettingsCleanup(container) {
             continue;
         }
 
-        for (let pair of getGroupPending(elem)) {
-            const [action, index] = pair.split(":");
-            if (action === "del") {
-                const keysRaw = elem.dataset["settingsSchema"]
-                    || elem.dataset["settingsTarget"];
-                (keysRaw ?? "").split(" ").forEach((key) => {
-                    out.push(`${key}${index}`);
-                });
-            }
+        const schema = elem.dataset["settingsSchemaDel"]
+            ?? elem.dataset["settingsSchema"]
+            ?? "";
+        if (!schema) {
+            continue;
         }
+
+        const prefix = "del:";
+
+        getGroupPending(elem)
+            .filter((x) => x.startsWith(prefix))
+            .map((x) => x.slice(prefix.length))
+            .forEach((index) => {
+                const elem_keys = schema
+                    .split(" ")
+                    .map((x) => `${x}${index}`);
+                if (!elem_keys.length) {
+                    return;
+                }
+
+                elem_keys.forEach((key) => {
+                    if (!keys.includes(key)) {
+                        out.push(key);
+                    }
+                });
+            });
     }
 
-    return out;
+    return [...new Set(out)];
 }
 
 /**
@@ -438,18 +482,20 @@ export function getData(forms, {cleanup = true, assumeChanged = false} = {}) {
                 data[data_name] = data_value;
             }
         }
-
-        // Make sure to remove dynamic group entries from the kvs
-        // Only group keys can be removed atm, so only process .settings-group
-        if (cleanup) {
-            out.del.push(...groupSettingsCleanup(form));
-        }
     }
 
     // Finally, filter out only fields that *must* be assigned.
     for (const name of Object.keys(data)) {
         if (assumeChanged || (changed_data.indexOf(name) >= 0)) {
             out.set[name] = data[name];
+        }
+    }
+
+    // Make sure to remove dynamic group entries from the kvs
+    // Only group keys can be removed atm, so only process .settings-group
+    if (cleanup) {
+        for (let form of forms) {
+            out.del.push(...groupSettingsCleanup(form, Object.keys(out.set)));
         }
     }
 
@@ -734,19 +780,6 @@ export function setSelectValue(select, value) {
 }
 
 /**
- * @param {HTMLElement} elem
- * @returns {string[]}
- */
-function settingsTargets(elem) {
-    let targets = elem.dataset["settingsTarget"];
-    if (!targets) {
-        return [];
-    }
-
-    return targets.split(" ");
-}
-
-/**
  * @param {InputOrSelect[]} elems
  */
 export function setOriginalsFromValues(elems) {
@@ -804,6 +837,13 @@ const Enumerable = {};
  * @param {SelectValue[]} values
  */
 export function initSelect(select, values) {
+    const initial = document.createElement("option");
+    initial.disabled = true;
+    initial.value = "";
+
+    select.appendChild(initial);
+    select.selectedIndex = 0;
+
     for (let value of values) {
         const option = document.createElement("option");
         option.textContent = value.name;
@@ -1123,6 +1163,10 @@ export function onElementChange(event) {
         Settings.increment(action);
     } else {
         Settings.decrement(action);
+    }
+
+    if (target.required) {
+        target.reportValidity();
     }
 
     Settings.stylizeSave();
