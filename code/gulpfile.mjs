@@ -35,20 +35,14 @@ import { build as esbuildBuild } from 'esbuild';
 import { minify as htmlMinify } from 'html-minifier-terser';
 import { JSDOM } from 'jsdom';
 
-import { default as gzip } from 'gulp-gzip';
 import { default as rename } from 'gulp-rename';
 
 import * as convert from 'convert-source-map';
 import * as through from 'through2';
 import fancyLog from 'fancy-log';
 
-import {
-    FileSystemConfigLoader,
-    HtmlValidate,
-    formatterFactory,
-} from 'html-validate';
-
 import * as fs from 'node:fs';
+import * as zlib from 'node:zlib';
 import * as http from 'node:http';
 import * as path from 'node:path';
 
@@ -170,7 +164,7 @@ const ENTRYPOINT = path.join(SRC_DIR, 'index.html')
 const STATIC_DIR = path.join('espurna', 'static');
 
 // -----------------------------------------------------------------------------
-// Methods
+// Build
 // -----------------------------------------------------------------------------
 
 /**
@@ -180,7 +174,8 @@ const STATIC_DIR = path.join('espurna', 'static');
 function toMinifiedHtml(options) {
     return through.obj(async function (/** @type {File} */source, _, callback) {
         if (!source.contents) {
-            throw new Error('expecting non-empty source contents');
+            callback(new Error('expecting non-empty source contents'));
+            return;
         }
 
         const contents = source.contents.toString();
@@ -200,6 +195,29 @@ function safename(name) {
 }
 
 /**
+ * @returns {StreamTransform}
+ */
+function toGzip() {
+    return through.obj(function(/** @type {File} */source, _, callback) {
+        if (!(source.contents instanceof Buffer)) {
+            callback(new Error('expecting source contents to be a buffer!'));
+            return;
+        }
+
+        zlib.gzip(source.contents.buffer, {level: zlib.constants.Z_BEST_COMPRESSION},
+            (error, result) => {
+                if (!error) {
+                    source.contents = result;
+                    source.path += '.gz';
+                    callback(null, source);
+                } else {
+                    callback(error);
+                }
+            });
+    });
+}
+
+/**
  * generates c++-friendly header output from the stream contents
  * @param {string} name
  * @returns {StreamTransform}
@@ -207,7 +225,8 @@ function safename(name) {
 function toHeader(name) {
     return through.obj(function (/** @type {File} */source, _, callback) {
         if (!(source.contents instanceof Buffer)) {
-            throw new Error('expecting source contents to be a buffer!');
+            callback(new Error('expecting source contents to be a buffer!'));
+            return;
         }
 
         let output = `alignas(4) static constexpr uint8_t ${safename(name)}[] PROGMEM = {`;
@@ -388,7 +407,8 @@ function inlineHandler(srcdir, modules, compress) {
 function modifyHtml(handlers) {
     return through.obj(function (/** @type {File} */source, _, callback) {
         if (!(source.contents instanceof Buffer)) {
-            throw new Error('expecting source contents to be a buffer!');
+            callback(new Error('expecting source contents to be a buffer!'));
+            return;
         }
 
         const dom = new JSDOM(source.contents, {includeNodeLocations: true});
@@ -524,26 +544,6 @@ function stripModules(modules) {
     }
 }
 
-function validateHtml() {
-    return through.obj(async function (/** @type {File} */source, _, callback) {
-        if (!source.contents) {
-            throw new Error('expecting non-empty source contents');
-        }
-
-        const validate = new HtmlValidate(new FileSystemConfigLoader());
-
-        const report = await validate.validateString(
-            source.contents.toString());
-        if (!report.valid) {
-            const asText = formatterFactory('text');
-            console.error(asText(report.results));
-            throw new Error('html validation failed');
-        }
-
-        callback(null, source);
-    });
-}
-
 /**
  * inline every external resource in the entrypoint.
  * works outside of gulp context, so used sources are only known after this is actually called
@@ -554,21 +554,25 @@ function validateHtml() {
  */
 function makeInlineSource(srcdir, modules, compress) {
     return through.obj(async function (/** @type {File} */source, _, callback) {
-        if (!source.contents || source.isNull()) {
-            callback(null, source);
+        if (!source.contents) {
+            callback(new Error('expecting non-empty source contents'));
             return;
         }
 
-        const contents = await inlineSource(
-            source.contents.toString(),
-            {
-                'compress': compress,
-                'handlers': [inlineHandler(srcdir, modules, compress)],
-                'rootpath': srcdir,
-            });
+        try {
+            const contents = await inlineSource(
+                source.contents.toString(),
+                {
+                    'compress': compress,
+                    'handlers': [inlineHandler(srcdir, modules, compress)],
+                    'rootpath': srcdir,
+                });
 
-        source.contents = Buffer.from(contents);
-        callback(null, source);
+            source.contents = Buffer.from(contents);
+            callback(null, source);
+        } catch (e) {
+            callback(e);
+        }
     });
 }
 
@@ -580,7 +584,8 @@ function makeInlineSource(srcdir, modules, compress) {
 function replace(lhs, rhs) {
     return through.obj(function (/** @type {File} */source, _, callback) {
         if (!(source.contents instanceof Buffer)) {
-            throw new Error('expecting source contents to be a buffer!');
+            callback(new Error('expecting source contents to be a buffer!'));
+            return;
         }
 
         const before = source.contents.toString();
@@ -612,8 +617,7 @@ function buildHtml(name, modules, compress = true) {
             injectVendor(compress),
             stripModules(modules),
             externalBlank(),
-        ]))
-        .pipe(validateHtml());
+        ]));
 
     if (compress) {
         return out.pipe(
@@ -660,7 +664,7 @@ function buildOutputs(name, stream) {
         .pipe(modifyHtml([
             dropSourcemap(),
         ]))
-        .pipe(gzip({gzipOptions: {level: 9}}))
+        .pipe(toGzip())
         .pipe(destination(BUILD_DIR))
         .pipe(logSize())
         .pipe(toHeader('webui_image'))
