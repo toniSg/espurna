@@ -1,6 +1,16 @@
 import { notifyError } from './errors.mjs';
-import { pageReloadIn, count } from './core.mjs';
-import { send, sendAction, connectionUrls } from './connection.mjs';
+import {
+    count,
+    pageReloadIn,
+    showPanelByName,
+} from './core.mjs';
+
+import {
+    send,
+    sendAction,
+    connectionUrls,
+} from './connection.mjs';
+
 import { validateForms } from './validate.mjs';
 
 /**
@@ -13,12 +23,17 @@ export function isChangedElement(elem) {
 /**
  * @param {Element} node
  */
-export function countChangedElements(node) {
-    const elems = /** @type {Array<InputOrSelect>} */
-        (Array.from(node.querySelectorAll(
+export function getElements(node) {
+    return /** @type {Array<InputOrSelect>} */(
+        Array.from(node.querySelectorAll(
             "input[data-changed],select[data-changed]")));
+}
 
-    return count(elems, isChangedElement);
+/**
+ * @param {Element} node
+ */
+export function countChangedElements(node) {
+    return count(getElements(node), isChangedElement);
 }
 
 /**
@@ -1271,18 +1286,24 @@ export function applySettings(settings) {
     send(JSON.stringify({settings}));
 }
 
-export function applySettingsFromAllForms() {
+/** @param {HTMLFormElement[]} forms */
+export function applySettingsFromForms(forms) {
+    applySettings(getData(forms));
+    Settings.resetChanged();
+    waitForSaved();
+}
+
+/** @param {Event} event */
+function applySettingsFromAllForms(event) {
+    event.preventDefault();
+
     const elems = /** @type {NodeListOf<HTMLFormElement>} */
         (document.querySelectorAll("form.form-settings"));
 
     const forms = Array.from(elems);
     if (validateForms(forms)) {
-        applySettings(getData(forms));
-        Settings.resetChanged();
-        waitForSaved();
+        applySettingsFromForms(forms);
     }
-
-    return false;
 }
 
 /** @param {Event} event */
@@ -1373,10 +1394,7 @@ export function init() {
         ?.addEventListener("change", handleSettingsFile);
 
     document.querySelector(".button-save")
-        ?.addEventListener("click", (event) => {
-            event.preventDefault();
-            applySettingsFromAllForms();
-        });
+        ?.addEventListener("click", applySettingsFromAllForms);
 
     document.querySelector(".button-settings-backup")
         ?.addEventListener("click", (event) => {
@@ -1400,6 +1418,11 @@ export function init() {
         });
     document.querySelector(".button-settings-factory")
         ?.addEventListener("click", resetToFactoryDefaults);
+
+    document.querySelector(".button-settings-password")
+        ?.addEventListener("click", () => {
+            showPanelByName("password");
+        });
 
     document.querySelectorAll(".button-add-settings-group")
         .forEach((elem) => {

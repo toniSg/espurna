@@ -7,9 +7,10 @@ window.addEventListener("error", (event) => {
 });
 
 import {
+    onPanelTargetClick,
     pageReloadIn,
     randomString,
-    onPanelTargetClick,
+    showPanelByName,
     styleInject,
 } from './core.mjs';
 
@@ -19,10 +20,8 @@ import { askAndCall } from './question.mjs';
 
 import {
     init as initSettings,
-    applySettings,
+    applySettingsFromForms,
     askSaveSettings,
-    getData,
-    setChangedElement,
     updateVariables,
     variableListeners,
 } from './settings.mjs';
@@ -143,16 +142,13 @@ function onMessage(value) {
  * @param {number} value
  */
 function initWebMode(value) {
-    const initial = (1 === value);
+    const layout = /** @type {!HTMLElement} */
+        (document.getElementById("layout"));
+    layout.style.display = "inherit";
 
-    const layout = document.getElementById("layout")
-    if (layout) {
-        layout.style.display = (initial ? "none" : "inherit");
-    }
-
-    const password = document.getElementById("password");
-    if (password) {
-        password.style.display = initial ? "inherit" : "none";
+    if (1 === value) {
+        layout.classList.add("initial");
+        showPanelByName("password");
     }
 }
 
@@ -326,9 +322,9 @@ function generatePasswordsForForm(form) {
         .map((x) => form.elements.namedItem(x))
         .filter((x) => x instanceof HTMLInputElement)
         .forEach((elem) => {
-            setChangedElement(elem);
             elem.type = "text";
             elem.value = value;
+            elem.dispatchEvent(new Event("change"));
         });
 }
 
@@ -341,14 +337,14 @@ function initSetupPassword(form) {
             elem.addEventListener("click", (event) => {
                 event.preventDefault();
 
-                const target = /** @type {HTMLInputElement} */
+                const target = /** @type {!HTMLInputElement} */
                     (event.target);
-                const lenient = target.classList
-                    .contains("button-setup-lenient");
+                const strict = target.classList
+                    .contains("button-setup-strict");
 
                 const forms = [form];
-                if (validateFormsPasswords(forms, {strict: !lenient})) {
-                    applySettings(getData(forms, {cleanup: false}));
+                if (validateFormsPasswords(forms, {strict})) {
+                    applySettingsFromForms(forms);
                 }
             });
         });
@@ -433,11 +429,9 @@ function onJsonPayload(event) {
 }
 
 function init() {
-    // Initial page, when webMode only allows to change the password
-    const passwd = document.forms.namedItem("form-setup-password");
-    if (passwd) {
-        initSetupPassword(passwd);
-    }
+    const password = /** @type {!HTMLFormElement} */
+        (document.forms.namedItem("form-setup-password"));
+    initSetupPassword(password);
 
     document.querySelectorAll(".password-reveal")
         .forEach((elem) => {
