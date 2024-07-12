@@ -8,7 +8,7 @@ import {
 import {
     send,
     sendAction,
-    connectionUrls,
+    onAppConnected,
 } from './connection.mjs';
 
 import { validateForms } from './validate.mjs';
@@ -1396,21 +1396,28 @@ export function init() {
     document.querySelector(".button-save")
         ?.addEventListener("click", applySettingsFromAllForms);
 
-    document.querySelector(".button-settings-backup")
-        ?.addEventListener("click", (event) => {
+    const backup = document.querySelector(".button-settings-backup");
+    if (backup instanceof HTMLButtonElement) {
+        onAppConnected((urls) => {
+            backup.dataset["url"] = urls.config.href;
+        });
+
+        backup.addEventListener("click", (event) => {
             event.preventDefault();
 
-            const urls = connectionUrls();
-            if (!urls) {
+            const url = backup.dataset["url"];
+            if (!url) {
+                alert("Not connected");
                 return;
             }
 
             const elem = document.getElementById("downloader");
             if (elem instanceof HTMLAnchorElement) {
-                elem.href = urls.config.href;
+                elem.href = url;
                 elem.click();
             }
         });
+    }
 
     document.querySelector(".button-settings-restore")
         ?.addEventListener("click", () => {
