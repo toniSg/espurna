@@ -7,6 +7,8 @@ import {
 } from './core.mjs';
 
 import {
+    addEnumerables,
+    listenEnumerableLabel,
     initSelect,
     setChangedElement,
     setOriginalsFromValues,
@@ -73,11 +75,9 @@ function initModuleMagnitudes(prefix, values, schema) {
         return;
     }
 
-    values.forEach((value) => {
+    values.forEach((value, id) => {
         const magnitude = fromSchema(value, schema);
 
-        const type = /** @type {!number} */
-            (magnitude.type);
         const index_global = /** @type {!number} */
             (magnitude.index_global);
         const index_module = /** @type {!number} */
@@ -87,8 +87,7 @@ function initModuleMagnitudes(prefix, values, schema) {
 
         const label = /** @type {!HTMLLabelElement} */
             (line.querySelector("label"));
-        label.textContent =
-            `${Magnitudes.types.get(type) ?? "?"} #${magnitude.index_global}`;
+        listenEnumerableLabel(label, id, "magnitude");
 
         const span = /** @type {!HTMLSpanElement} */
             (line.querySelector("span"));
@@ -148,6 +147,11 @@ function initMagnitudes(types, errors, units) {
  * @param {MagnitudeCallback[]} callbacks
  */
 function initMagnitudesList(values, schema, callbacks) {
+    /** @import { EnumerableEntry } from './settings.mjs' */
+
+    /** @type {EnumerableEntry[]} */
+    const enumerables = [];
+
     values.forEach((value, id) => {
         const magnitude = fromSchema(value, schema);
 
@@ -164,11 +168,18 @@ function initMagnitudesList(values, schema, callbacks) {
             description: /** @type {string} */(magnitude.description),
         };
 
+        enumerables.push({
+            id,
+            name: prettyName,
+        });
+
         Magnitudes.properties.set(id, result);
         callbacks.forEach((callback) => {
             callback(id, result);
         });
     });
+
+    addEnumerables("magnitude", enumerables);
 }
 
 /**
