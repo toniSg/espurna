@@ -311,6 +311,7 @@ async function inlineJavascriptBundle(sourcefile, contents, resolveDir, define, 
             resolveDir,
             sourcefile,
         },
+        format: 'esm',
         bundle: true,
         plugins: [
             forceNoSideEffects(),
