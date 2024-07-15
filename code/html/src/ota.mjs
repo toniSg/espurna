@@ -1,5 +1,5 @@
 import { notifyMessage } from './errors.mjs';
-import { onAppConnected } from './connection.mjs';
+import { listenAppConnected } from './connection.mjs';
 import { variableListeners } from './settings.mjs';
 
 let __free_size = 0;
@@ -218,7 +218,7 @@ export function init() {
         return;
     }
 
-    onAppConnected((urls) => {
+    listenAppConnected((urls) => {
         button.dataset["url"] = urls.upgrade.href;
     });
 

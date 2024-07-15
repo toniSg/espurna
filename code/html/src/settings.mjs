@@ -8,7 +8,7 @@ import {
 import {
     send,
     sendAction,
-    onAppConnected,
+    listenAppConnected,
 } from './connection.mjs';
 
 import { validateForms } from './validate.mjs';
@@ -1398,7 +1398,7 @@ export function init() {
 
     const backup = document.querySelector(".button-settings-backup");
     if (backup instanceof HTMLButtonElement) {
-        onAppConnected((urls) => {
+        listenAppConnected((urls) => {
             backup.dataset["url"] = urls.config.href;
         });
 

@@ -210,7 +210,7 @@ function onSendEvent(event) {
 }
 
 /** @param {function(ConnectionUrls): void} callback */
-export function onAppConnected(callback) {
+export function listenAppConnected(callback) {
     window.addEventListener("app-connected", (event) => {
         event.preventDefault();
 

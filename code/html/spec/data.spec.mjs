@@ -9,6 +9,7 @@ import {
     initInputKeyValueElement,
     isChangedElement,
     setInputValue,
+    countChangedElements,
 } from '../src/settings.mjs';
 
 beforeAll(() => {
@@ -244,7 +245,10 @@ test('settings group remove', () => {
 
     // until now, all rows are expected to be 'unchanged'
     groupSettingsDel(remove, second);
-    expect(remove.children.length).toEqual(3);
+    expect(remove.children.length)
+        .toEqual(3);
+    expect(countChangedElements(remove))
+        .toEqual(4);
 
     // 2nd row removal should handle following keys
     data = getData([form]);
@@ -295,10 +299,14 @@ test('settings group remove', () => {
 
     expect(remove.children.length)
         .toEqual(5);
+    expect(countChangedElements(remove))
+        .toEqual((3 * 2) + 1);
 
     groupSettingsDel(remove, first);
     expect(remove.children.length)
         .toEqual(4);
+    expect(countChangedElements(remove))
+        .toEqual(4 * 2);
 
     // substituted row keys should no longer be in del set
     // resulting data is effectively every element present

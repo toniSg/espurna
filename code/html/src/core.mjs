@@ -157,7 +157,5 @@ export function assert(value, message = "") {
  * @returns {number}
  */
 export function count(values, callback) {
-    return values
-        .map((value) => /** @type {number} */(callback(value) ? 1 : 0))
-        .reduce((lhs, rhs) => lhs + rhs, 0);
+    return values.filter(callback).length;
 }
