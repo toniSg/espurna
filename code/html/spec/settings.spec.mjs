@@ -4,6 +4,7 @@ import {
     addSimpleEnumerables,
     checkAndSetElementChanged,
     getDataForElement,
+    getOriginalForElement,
     getEnumerables,
     isChangedElement,
     setOriginalsFromValues,
@@ -20,6 +21,9 @@ test('select unchanged with empty value when original is missing', () => {
         elem.value = value;
         node.appendChild(elem);
     }
+
+    expect(getDataForElement(node))
+        .toEqual(getOriginalForElement(node));
 
     node.selectedIndex = -1;
     expect(getDataForElement(node)).toBe(null);
@@ -46,6 +50,9 @@ test('number input unchanged with empty value when original is missing', () => {
     const node = document.createElement('input');
     node.type = 'number';
 
+    expect(getDataForElement(node))
+        .toEqual(getOriginalForElement(node));
+
     const data = 12345;
     expect(getDataForElement(node)).toBe(null);
     assert(!isChangedElement(node));
@@ -70,6 +77,9 @@ test('number input unchanged with empty value when original is missing', () => {
 test('text input unchanged with empty value when original is missing', () => {
     const node = document.createElement('input');
     node.type = 'text';
+
+    expect(getDataForElement(node))
+        .toEqual(getOriginalForElement(node));
 
     const data = 'this never gets commited';
     expect(getDataForElement(node)).toBe('');
