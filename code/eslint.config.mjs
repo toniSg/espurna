@@ -1,9 +1,9 @@
-import globals from 'globals';
-import js from '@eslint/js';
+import globals from "globals";
+import js from "@eslint/js";
 
 export default [
     {
-        files: ['gulpfile.mjs'],
+        files: ["gulpfile.mjs"],
         languageOptions: {
             "globals": {
                 ...globals.es2021,
@@ -12,6 +12,7 @@ export default [
         },
         rules: {
             ...js.configs.recommended.rules,
+            "quotes": ["error", "single"],
             "no-throw-literal": "error",
             "no-unused-vars": ["error", {
                 "argsIgnorePattern": "^_",
@@ -19,7 +20,7 @@ export default [
         }
     },
     {
-        files: ['html/src/**/*.mjs'],
+        files: ["html/src/**/*.mjs"],
         languageOptions: {
             "globals": {
                 ...globals.es2021,
