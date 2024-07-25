@@ -29,7 +29,7 @@ export function validatePassword(value) {
 }
 
 /**
- * @typedef {{strict?: boolean}} ValidationOptions
+ * @typedef {{strict?: boolean, assumeChanged?: boolean}} ValidationOptions
  */
 
 /**
@@ -77,11 +77,12 @@ function validateInputOrSelect(elem) {
  * Try to validate password pair in the given list of forms. Alerts when validation fails.
  * With initial setup, this usually happens to be the only validation func w/ optional strict mode.
  * With normal panel, strict is expected to be false.
+ * Only 'changed' elements affect validation, password fields can remain empty and still pass validation.
  * @param {HTMLFormElement[]} forms
  * @param {ValidationOptions} options
  * @returns {boolean}
  */
-export function validateFormsPasswords(forms, {strict = true} = {}) {
+export function validateFormsPasswords(forms, {strict = true, assumeChanged = false} = {}) {
     const [form] = filterPasswordForm(forms);
     if (!form) {
         return true;
@@ -92,10 +93,14 @@ export function validateFormsPasswords(forms, {strict = true} = {}) {
     const inputs = formPassPair(form);
     if (!inputs || inputs.length !== 2) {
         err = EMPTY_PASSWORD;
-    } else if (inputs[0].value !== inputs[1].value) {
-        err = DIFFERENT_PASSWORD;
-    } else if (strict && !validatePassword(inputs[0].value)) {
-        err = INVALID_PASSWORD;
+    } else if (assumeChanged || inputs.some(isChangedElement)) {
+        if (!inputs[0].value.length || !inputs[1].value.length) {
+            err = EMPTY_PASSWORD;
+        } else if (inputs[0].value !== inputs[1].value) {
+            err = DIFFERENT_PASSWORD;
+        } else if (strict && !validatePassword(inputs[0].value)) {
+            err = INVALID_PASSWORD;
+        }
     }
 
     if (!err) {

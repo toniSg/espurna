@@ -8,7 +8,6 @@ import {
     applySettingsFromForms,
     resetChangedElement,
     listenVariables,
-    isChangedElement,
 } from './settings.mjs';
 
 const FORM_SETUP_PASSWORD = "form-setup-password";
@@ -39,8 +38,7 @@ export function filterForm(forms) {
 export function formPassPair(form) {
     const out = ["adminPass0", "adminPass1"]
         .map((x) => form.elements.namedItem(x))
-        .filter((x) => x instanceof HTMLInputElement)
-        .filter(isChangedElement);
+        .filter((x) => x instanceof HTMLInputElement);
 
     if (out.length === 2) {
         return [out[0], out[1]];
@@ -99,7 +97,7 @@ function initSetupPassword(form) {
                     .contains("button-setup-strict");
 
                 const forms = [form];
-                if (validateFormsPasswords(forms, {strict})) {
+                if (validateFormsPasswords(forms, {strict, assumeChanged: true})) {
                     applySettingsFromForms(forms);
                 }
             });

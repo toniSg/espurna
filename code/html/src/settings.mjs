@@ -582,11 +582,8 @@ export function getDataForElement(elem) {
  * @param {InputOrSelect} elem
  * @returns {ElementValue}
  */
-function getOriginalForElement(elem) {
+export function getOriginalForElement(elem) {
     const original = elem.dataset["original"];
-    if (original === undefined) {
-        return null;
-    }
 
     if (elem instanceof HTMLInputElement) {
         switch (elem.type) {
@@ -594,18 +591,23 @@ function getOriginalForElement(elem) {
         case "text":
         case "password":
         case "hidden":
-            return original;
+            return original ?? "";
 
         case "checkbox":
-            return stringToBoolean(original);
+            return (original !== undefined)
+                ? stringToBoolean(original)
+                : false;
 
         case "number":
         case "range":
-            return parseInt(original);
-
+            return (original !== undefined)
+                ? parseInt(original)
+                : null;
         }
     } else if (elem instanceof HTMLSelectElement) {
-        if (elem.multiple) {
+        if (original === undefined) {
+            return "";
+        } else if (elem.multiple) {
             return bitsetFromSelectedValues(original.split(","));
         } else {
             return original;
