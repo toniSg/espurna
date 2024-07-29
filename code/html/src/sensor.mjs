@@ -324,13 +324,16 @@ function emonRatioInfo(id) {
     return magnitudeSettingInfo(id, "Ratio");
 }
 
+/** @typedef {{required?: boolean, min?: string, max?: string}} MagnitudeNumberOptions */
+
 /**
  * @param {string} containerId
  * @param {number} id
  * @param {string} keySuffix
  * @param {number} value
+ * @param {MagnitudeNumberOptions} options
  */
-function initMagnitudeNumberSetting(containerId, id, keySuffix, value) {
+function initMagnitudeNumberSetting(containerId, id, keySuffix, value, {required = true, min = "", max = ""} = {}) {
     const container = document.getElementById(containerId);
     if (!container) {
         return;
@@ -345,15 +348,19 @@ function initMagnitudeNumberSetting(containerId, id, keySuffix, value) {
 
     const template = new NumberInput();
     mergeTemplate(container, template.with(
-        (label, input) => {
+        (label, input, span) => {
             label.textContent = info.name;
-            label.htmlFor = input.id;
+            label.htmlFor = info.key;
 
             input.id = info.key;
-            input.name = input.id;
+            input.name = info.key;
+            input.required = required;
+            input.min = min;
+            input.max = max;
             input.value = value.toString();
 
-            setOriginalsFromValues([input]);
+            setOriginalFromValue(input);
+            listenEnumerableMagnitudeDescription(span, id);
         }));
 }
 
@@ -478,19 +485,19 @@ function initMagnitudesSettings(values, schema) {
         if (typeof threshold === "number") {
             initMagnitudeNumberSetting(
                 "magnitude-zero-thresholds", id,
-                "ZeroThreshold", threshold);
+                "ZeroThreshold", threshold, {required: false});
         }
 
         if (typeof settings.MinDelta === "number") {
             initMagnitudeNumberSetting(
                 "magnitude-min-deltas", id,
-                "MinDelta", settings.MinDelta);
+                "MinDelta", settings.MinDelta, {min: "0"});
         }
 
         if (typeof settings.MaxDelta === "number") {
             initMagnitudeNumberSetting(
                 "magnitude-max-deltas", id,
-                "MaxDelta", settings.MaxDelta);
+                "MaxDelta", settings.MaxDelta, {min: "0"});
         }
     });
 }
