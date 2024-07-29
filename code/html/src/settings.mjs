@@ -936,12 +936,13 @@ function onEnumerableUpdateElem(elem, enumerables) {
 
 /**
  * @param {Event} event
+ * @param {EnumerableElemCallback} callback
  */
-function onEnumerableUpdate(event) {
+function onEnumerableUpdate(event, callback) {
     const elem = /** @type {!HTMLElement} */(event.target);
     const enumerables = /** @type {CustomEvent<{enumerables: EnumerableEntry[]}>} */
         (event).detail.enumerables;
-    onEnumerableUpdateElem(elem, enumerables);
+    callback(elem, enumerables);
 }
 
 /**
@@ -963,17 +964,26 @@ function notifyEnumerables(name, enumerables) {
 
 /**
  * @param {HTMLElement} elem
- * @param {string} name
+ * @param {EnumerableEntry[]} enumerables
  */
-export function listenEnumerableName(elem, name) {
+
+/**
+ * @param {HTMLElement} elem
+ * @param {string} name
+ * @param {EnumerableElemCallback?} callback
+ */
+export function listenEnumerableName(elem, name, callback = null) {
+    callback = callback ?? onEnumerableUpdateElem;
     elem.addEventListener(
-        `enumerable-update-${name}`, onEnumerableUpdate);
+        `enumerable-update-${name}`,
+        (event) => onEnumerableUpdate(event, callback));
+
     const current = Enumerable[name];
     if (!current || !current.length) {
         return;
     }
 
-    onEnumerableUpdateElem(elem, current);
+    callback(elem, current);
 }
 
 /**
@@ -981,25 +991,35 @@ export function listenEnumerableName(elem, name) {
  * @param {number} id
  * @param {string} name
  */
-export function listenEnumerableLabel(elem, id, name) {
-    const span = document.createElement("span");
-    span.dataset["enumerable"] = name;
-    span.dataset["enumerableId"] = id.toString();
+export function prepareEnumerableTarget(elem, id, name) {
+    elem.dataset["enumerableId"] = id.toString();
+    elem.dataset["enumerable"] = name;
+}
 
-    listenEnumerableName(span, name);
+/**
+ * @param {HTMLElement} elem
+ * @param {number} id
+ * @param {string} name
+ * @param {EnumerableElemCallback?} callback
+ */
+export function listenEnumerableTarget(elem, id, name, callback = null) {
+    const span = document.createElement("span");
+    prepareEnumerableTarget(span, id, name);
+    listenEnumerableName(span, name, callback);
     elem.appendChild(span);
 }
 
 /**
  * @param {HTMLElement} elem
+ * @param {EnumerableElemCallback?} callback
  */
-export function listenEnumerable(elem) {
+export function listenEnumerable(elem, callback = null) {
     const name = elem.dataset["enumerable"];
     if (!name) {
         return;
     }
 
-    listenEnumerableName(elem, name);
+    listenEnumerableName(elem, name, callback);
 }
 
 /**
