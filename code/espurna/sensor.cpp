@@ -4214,7 +4214,7 @@ void loop() {
 
             // We also check that value is above a certain threshold
             if ((!std::isnan(magnitude.zero_threshold)) && ((value.raw < magnitude.zero_threshold))) {
-                value.raw = 0.0;
+                continue;
             }
 
             magnitude.read_count = (magnitude.read_count + 1) % reportEvery();
