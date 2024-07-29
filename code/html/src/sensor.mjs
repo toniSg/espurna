@@ -8,23 +8,31 @@ import {
 
 import {
     addEnumerables,
-    listenEnumerableLabel,
+    prepareEnumerableTarget,
+    listenEnumerableName,
+    listenEnumerableTarget,
     initSelect,
     setChangedElement,
-    setOriginalsFromValues,
+    setOriginalFromValue,
     setSelectValue,
     variableListeners,
 } from './settings.mjs';
 
 import {
     fromSchema,
-    loadConfigTemplate,
     loadTemplate,
     mergeTemplate,
     NumberInput,
 } from './template.mjs';
 
-/** @typedef {{name: string, units: number, type: number, index_global: number, description: string}} Magnitude */
+/**
+ * @typedef Magnitude
+ * @property {string} description
+ * @property {number} index_global
+ * @property {string} name
+ * @property {number} type
+ * @property {number} units
+*/
 
 /** @typedef {[number, string]} SupportedUnits */
 
@@ -38,13 +46,11 @@ const Magnitudes = {
     /** @type {Map<number, string>} */
     types: new Map(),
 
-    units: {
-        /** @type {Map<number, SupportedUnits[]>} */
-        supported: new Map(),
+    /** @type {Map<number, string>} */
+    units: new Map(),
 
-        /** @type {Map<number, string>} */
-        names: new Map(),
-    },
+    /** @type {Map<number, number[]>} */
+    supportedUnits: new Map(),
 
     /** @type {Map<number, string>} */
     typePrefix: new Map(),
@@ -65,6 +71,35 @@ function magnitudeTypedKey(magnitude, name) {
 }
 
 /**
+ * @param {number} type
+ */
+function magnitudeTypeName(type) {
+    return Magnitudes.types.get(type)
+        ?? type.toString();
+}
+
+/**
+ * @param {number} type
+ * @param {number} index
+ */
+function magnitudeName(type, index) {
+    return `${magnitudeTypeName(type)} #${index}`;
+}
+
+/**
+ * @param {HTMLElement} elem
+ * @param {number} id
+ */
+function listenEnumerableMagnitudeDescription(elem, id) {
+    prepareEnumerableTarget(elem, id, "magnitude");
+    listenEnumerableName(elem, "magnitude",
+        (elem) => {
+            elem.textContent =
+                Magnitudes.properties.get(id)?.description ?? "";
+        });
+}
+
+/**
  * @param {string} prefix
  * @param {any[][]} values
  * @param {string[]} schema
@@ -75,32 +110,24 @@ function initModuleMagnitudes(prefix, values, schema) {
         return;
     }
 
+    const template = new NumberInput();
+
     values.forEach((value, id) => {
         const magnitude = fromSchema(value, schema);
 
-        const index_global = /** @type {!number} */
-            (magnitude.index_global);
-        const index_module = /** @type {!number} */
-            (magnitude.index_module);
+        mergeTemplate(container, template.with(
+            (label, input, span) => {
+                listenEnumerableTarget(label, id, "magnitude");
 
-        const line = loadConfigTemplate("module-magnitude");
+                input.min = "0";
+                input.name = `${prefix}Magnitude`;
+                input.required = true;
+                input.value = /** @type {!number} */
+                    (magnitude.index_module).toString();
+                setOriginalFromValue(input);
 
-        const label = /** @type {!HTMLLabelElement} */
-            (line.querySelector("label"));
-        listenEnumerableLabel(label, id, "magnitude");
-
-        const span = /** @type {!HTMLSpanElement} */
-            (line.querySelector("span"));
-        span.textContent =
-            Magnitudes.properties.get(index_global)?.description ?? "";
-
-        const input = /** @type {!HTMLInputElement} */
-            (line.querySelector("input"));
-        input.name = `${prefix}Magnitude`;
-        input.value = index_module.toString();
-        input.dataset["original"] = input.value;
-
-        mergeTemplate(container, line);
+                listenEnumerableMagnitudeDescription(span, id);
+            }));
     });
 }
 
@@ -121,6 +148,9 @@ function initMagnitudes(types, errors, units) {
         const prefix = /** @type {string} */(info.prefix);
         Magnitudes.typePrefix.set(type, prefix);
         Magnitudes.prefixType.set(prefix, type);
+
+        const supported_units = /** @type {number[]} */(info.units);
+        Magnitudes.supportedUnits.set(type, supported_units);
     });
 
     /** @type {[number, string][]} */
@@ -131,12 +161,12 @@ function initMagnitudes(types, errors, units) {
             /** @type {string} */(error.name));
     });
 
-    /** @type {SupportedUnits[][]} */
-    (units).forEach((value, id) => {
-        Magnitudes.units.supported.set(id, value);
-        value.forEach(([type, name]) => {
-            Magnitudes.units.names.set(type, name);
-        });
+    /** @type {SupportedUnits[]} */
+    (units.values).forEach((value) => {
+        const unit = fromSchema(value, units.schema);
+        Magnitudes.units.set(
+            /** @type {number} */(unit.type),
+            /** @type {string} */(unit.name));
     });
 }
 
@@ -155,22 +185,29 @@ function initMagnitudesList(values, schema, callbacks) {
     values.forEach((value, id) => {
         const magnitude = fromSchema(value, schema);
 
-        const type = /** @type {number} */(magnitude.type);
-        const prettyName =
-            `${Magnitudes.types.get(type) ?? "?"} #${magnitude.index_global}`;
+        const description = /** @type {string} */
+            (magnitude.description);
+        const index_global = /** @type {number} */
+            (magnitude.index_global);
+        const type = /** @type {number} */
+            (magnitude.type);
+        const units = /** @type {number} */
+            (magnitude.units);
+
+        const name = magnitudeName(type, index_global);
 
         /** @type {Magnitude} */
         const result = {
-            name: prettyName,
-            units: /** @type {number} */(magnitude.units),
-            type: type,
-            index_global: /** @type {number} */(magnitude.index_global),
-            description: /** @type {string} */(magnitude.description),
+            description,
+            index_global,
+            name,
+            type,
+            units,
         };
 
         enumerables.push({
             id,
-            name: prettyName,
+            name,
         });
 
         Magnitudes.properties.set(id, result);
@@ -215,16 +252,10 @@ function createMagnitudeInfo(id, magnitude) {
 }
 
 /**
- * @param {number} id
+ * @param {number} _id
  * @param {Magnitude} magnitude
  */
-function createMagnitudeUnitSelector(id, magnitude) {
-    // but, no need for the element when there's no choice
-    const supported = Magnitudes.units.supported.get(id);
-    if ((supported === undefined) || (!supported.length)) {
-        return;
-    }
-
+function createMagnitudeUnitSelector(_id, magnitude) {
     const container = document.getElementById("magnitude-units");
     if (!container) {
         return;
@@ -235,22 +266,22 @@ function createMagnitudeUnitSelector(id, magnitude) {
     const label = /** @type {!HTMLLabelElement} */
         (line.querySelector("label"));
     label.textContent =
-        `${Magnitudes.types.get(magnitude.type) ?? "?"} #${magnitude.index_global}`;
+        magnitudeName(magnitude.type, magnitude.index_global);
 
     const select = /** @type {!HTMLSelectElement} */
         (line.querySelector("select"));
     select.setAttribute("name",
         magnitudeTypedKey(magnitude, "Units"));
 
-    /** @type {{id: number, name: string}[]} */
-    const options = [];
-    supported.forEach(([id, name]) => {
-        options.push({id, name});
-    });
+    const options = (Magnitudes.supportedUnits.get(magnitude.type) ?? [])
+        .map((type) => ({
+            'id': type,
+            'name': Magnitudes.units.get(type) ?? type.toString()
+        }));
 
     initSelect(select, options);
     setSelectValue(select, magnitude.units);
-    setOriginalsFromValues([select]);
+    setOriginalFromValue(select);
 
     container?.parentElement?.classList?.remove("maybe-hidden");
     mergeTemplate(container, line);
@@ -277,7 +308,7 @@ function magnitudeSettingInfo(id, suffix) {
         id: id,
         name: props.name,
         key: `${prefix}${suffix}${props.index_global}`,
-        prefix: prefix, 
+        prefix,
         index_global: props.index_global,
     };
 
@@ -493,8 +524,8 @@ function updateMagnitudes(values, schema) {
             props.units = magnitude.units;
         }
 
-        const units =
-            Magnitudes.units.names.get(props.units) ?? "";
+        const units = Magnitudes.units.get(
+            /** @type {number} */(magnitude.units)) ?? "";
 
         if (typeof magnitude.error === "number" && 0 !== magnitude.error) {
             input.value =

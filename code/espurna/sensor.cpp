@@ -480,7 +480,7 @@ public:
 
     unsigned char index_global; // N'th magnitude of it's type, across all of the active sensors
 
-    Unit units { Unit::None }; // Units of measurement
+    Unit units { Unit::None }; // Current units of measurement
     unsigned char decimals { 0u }; // Number of decimals in textual representation
 
     Filter filter_type { Filter::Median }; // Instead of using raw value, filter it through a filter object
@@ -2577,6 +2577,15 @@ void load() {
 
 namespace units {
 
+using underlying_type = std::underlying_type<Unit>::type;
+
+namespace internal {
+
+constexpr auto CountMax = static_cast<underlying_type>(Unit::Max_) + 1;
+unsigned char counts[CountMax];
+
+} // namespace internal
+
 struct Range {
     Range() = default;
 
@@ -2790,12 +2799,36 @@ sensor::Unit filter(const Magnitude& magnitude, Unit unit) {
     return supported(magnitude, unit) ? unit : magnitude.units;
 }
 
+size_t count(Unit unit) {
+    return internal::counts[static_cast<underlying_type>(unit)];
+}
+
+template <typename T>
+void forEachCounted(T&& callback) {
+    for (unsigned char index = 0; index < internal::CountMax; ++index) {
+        if (internal::counts[index] > 0) {
+            callback(index, static_cast<Unit>(index));
+        }
+    }
+}
+
 String name(Unit unit) {
     return espurna::settings::internal::serialize(unit);
 }
 
 String name(const Magnitude& magnitude) {
     return name(magnitude.units);
+}
+
+void setup(Unit unit) {
+    ++internal::counts[static_cast<underlying_type>(unit)];
+}
+
+void setup(unsigned char type) {
+    const auto range = units::range(type);
+    for (auto entry : range) {
+        setup(entry);
+    }
 }
 
 } // namespace units
@@ -3298,7 +3331,14 @@ void types(JsonObject& root) {
         }},
         {STRING_VIEW("name"), [](JsonArray& out, size_t index) {
             out.add(sensor::magnitude::name(index));
-        }}
+        }},
+        {STRING_VIEW("units"), [](JsonArray& out, size_t index) {
+            JsonArray& units = out.createNestedArray();
+            const auto range = units::range(index);
+            for (auto entry : range) {
+                units.add(static_cast<units::underlying_type>(entry));
+            }
+        }},
     });
 }
 
@@ -3315,22 +3355,27 @@ void errors(JsonObject& root) {
 }
 
 void units(JsonObject& root) {
-    JsonArray& units = root.createNestedArray(STRING_VIEW("units"));
-
-    for (size_t index = 0; index < magnitude::internal::magnitudes.size(); ++index) {
-        JsonArray& supported = units.createNestedArray();
-
-        const auto range = units::range(magnitude::get(index).type);
-        for (auto it = range.begin(); it != range.end(); ++it) {
-            JsonArray& unit = supported.createNestedArray();
-            unit.add(static_cast<int>(*it)); // raw id
-            unit.add(units::name(*it));  // as string
-        }
-    }
+    espurna::web::ws::EnumerablePayload payload{root, STRING_VIEW("units")};
+    payload(STRING_VIEW("values"),
+        {
+            static_cast<size_t>(Unit::Min_),
+            static_cast<size_t>(Unit::Max_) + 1,
+        },
+        [](size_t type) {
+            return units::count(static_cast<Unit>(type)) > 0;
+        },
+        {{STRING_VIEW("type"), [](JsonArray& out, size_t index) {
+            out.add(index);
+        }},
+        {STRING_VIEW("name"), [](JsonArray& out, size_t index) {
+            out.add(sensor::units::name(static_cast<Unit>(index)));
+        }}
+    });
 }
 
 void initial(JsonObject& root) {
     if (!sensor::ready()) {
+        root[STRING_VIEW("magnitudes-pending")] = 1;
         return;
     }
 
@@ -3349,11 +3394,11 @@ void list(JsonObject& root) {
 
     espurna::web::ws::EnumerablePayload payload{root, STRING_VIEW("magnitudes-list")};
     payload(STRING_VIEW("values"), magnitude::count(),
-        {{STRING_VIEW("index_global"), [](JsonArray& out, size_t index) {
-            out.add(magnitude::get(index).index_global);
-        }},
-        {STRING_VIEW("type"), [](JsonArray& out, size_t index) {
+        {{STRING_VIEW("type"), [](JsonArray& out, size_t index) {
             out.add(magnitude::get(index).type);
+        }},
+        {STRING_VIEW("index_global"), [](JsonArray& out, size_t index) {
+            out.add(magnitude::get(index).index_global);
         }},
         {STRING_VIEW("description"), [](JsonArray& out, size_t index) {
             out.add(magnitude::description(magnitude::get(index)));
@@ -3486,6 +3531,14 @@ void onAction(uint32_t client_id, const char* action, JsonObject& data) {
 
     if (STRING_VIEW("emon-reset-ratios") == action) {
         energy::reset();
+        return;
+    }
+
+    if (STRING_VIEW("magnitudes-pending") == action) {
+        if (sensor::ready()) {
+            wsPostSequence(client_id,
+                {initial, list, settings});
+        }
         return;
     }
 }
@@ -3974,6 +4027,9 @@ bool init() {
             if (MAGNITUDE_ENERGY == result.type) {
                 energy::setup(result);
             }
+
+            // Track both supported and currently used units
+            units::setup(result.type);
         }
     }
 
