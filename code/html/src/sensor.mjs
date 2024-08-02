@@ -427,10 +427,10 @@ function initMagnitudesExpected(id) {
     expected.id = expected.name;
     expected.dataset["id"] = info.id.toString();
 
-    const messageClass = `emon-visible-${info.prefix}`;
-    if (!container.querySelector(`.emon-expected.${messageClass}`)) {
-        const [top] = template.querySelectorAll("div");
-        top.classList.add(messageClass);
+    const [message] = /** @type {NodeListOf<HTMLSpanElement>} */
+        (template.querySelectorAll(`span.emon-expected-${info.prefix}`));
+    if (message) {
+        message.classList.replace("hidden", "visible");
     }
 
     mergeTemplate(container, template);
