@@ -59,6 +59,14 @@ enum class Unit : int {
     Max_ = 32
 };
 
+enum class Filter : int {
+    Last,
+    Max,
+    Median,
+    MovingAverage,
+    Sum,
+};
+
 struct Watts {
     using Type = double;
     using Ratio = std::ratio<1>;

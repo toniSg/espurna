@@ -310,14 +310,6 @@ struct ReadValue {
     double filtered;  // after applying filters, units and decimals
 };
 
-enum class Filter : int {
-    Last,
-    Max,
-    Median,
-    MovingAverage,
-    Sum,
-};
-
 } // namespace
 
 // Generic storage. Most of the time we init this on boot with both members or start at 0 and increment with watt-second
