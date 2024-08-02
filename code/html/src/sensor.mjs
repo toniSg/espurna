@@ -55,6 +55,9 @@ const Magnitudes = {
 
     /** @type {Map<string, number>} */
     prefixType: new Map(),
+
+    /** @type {boolean} */
+    pending: false,
 };
 
 /**
@@ -135,6 +138,19 @@ function initModuleMagnitudes(prefix, values, schema) {
                 listenEnumerableMagnitudeDescription(span, id);
             }));
     });
+}
+
+// Poll remote for magnitudes initial setup
+function pendingMagnitudes() {
+    if (Magnitudes.pending) {
+        sendAction("magnitudes-pending");
+        window.setTimeout(pendingMagnitudes, 5000);
+    }
+}
+
+function waitPendingMagnitudes() {
+    Magnitudes.pending = true;
+    pendingMagnitudes();
 }
 
 /**
@@ -223,6 +239,7 @@ function initMagnitudesList(values, schema, callbacks) {
     });
 
     addEnumerables("magnitude", enumerables);
+    Magnitudes.pending = false;
 }
 
 /**
@@ -591,6 +608,9 @@ function updateEnergy(values, schema) {
  */
 function listeners() {
     return {
+        "magnitudes-pending": () => {
+            waitPendingMagnitudes();
+        },
         "magnitudes-init": (_, value) => {
             initMagnitudes(
                 value.types, value.errors, value.units);
