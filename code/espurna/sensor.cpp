@@ -3867,8 +3867,11 @@ void configure_magnitude(Magnitude& magnitude) {
         magnitude.filter = magnitude::makeFilter(magnitude.filter_type);
     }
 
-    // Some filters must be able store up to a certain amount of readings.
+    // Everything filtered so far is reset, possibly updating total number of required readings.
     magnitude.filter->resize(reportEvery());
+
+    // Reset internal readings counter as well.
+    magnitude.read_count = 0;
 
     // process emon-specific settings first. ensure that settings use global index and we access sensor with the local one
     if (isEmon(magnitude.sensor) && magnitude::traits::ratio_supported(magnitude.type)) {
