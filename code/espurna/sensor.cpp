@@ -491,8 +491,8 @@ public:
 
     size_t read_count { 0 }; // Number of times 'last' was updated
 
-    ValuePair last { DefaultValuePair }; // Last 'read' value
-    ValuePair reported { DefaultValuePair }; // Last 'reported' value
+    ValuePair last = DefaultValuePair; // Last 'read' value
+    ValuePair reported = DefaultValuePair; // Last 'reported' value
 
     double min_delta { 0.0 }; // Minimum value change to report
     double max_delta { 0.0 }; // Maximum value change to report
