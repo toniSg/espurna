@@ -2,6 +2,11 @@ import { updateVariables } from './settings.mjs';
 
 export function init() {
     updateVariables({
+        ntpServer: "192.168.1.1",
+        ntpTZ: 'UTC-2',
+        ntpStartDelay: 10,
+        ntpDhcp: true,
+        ntpUpdateIntvl: 1800,
         webMode: 0,
         useWhite: false,
         useCCT: false,
