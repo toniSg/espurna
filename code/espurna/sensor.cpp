@@ -3795,7 +3795,7 @@ void magnitudes(::terminal::CommandContext&& ctx) {
 
     size_t index = 0;
     for (const auto& magnitude : magnitude::internal::magnitudes) {
-        ctx.output.printf_P(PSTR("%2zu * %s @ %s (read %s reported %s)\n"),
+        ctx.output.printf_P(PSTR("%2zu * %s @ %s read %s reported %s\n"),
             index++, magnitude::topicWithIndex(magnitude).c_str(),
             magnitude::description(magnitude).c_str(),
             magnitude::format_with_units(magnitude, magnitude.last).c_str(),
