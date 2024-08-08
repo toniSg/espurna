@@ -305,11 +305,21 @@ void forEachError(T&& callback) {
     }
 }
 
-struct ReadValue {
-    double raw;       // as the sensor returns it
-    double processed; // after applying units and decimals
-    double filtered;  // after applying filters, units and decimals
+// minimal subset of Value for internal use
+struct ValuePair {
+    double value;
+    Unit units;
 };
+
+constexpr ValuePair make_value_pair(double value, Unit units) {
+    return ValuePair{
+        .value = value,
+        .units = units,
+    };
+}
+
+constexpr auto DefaultValuePair =
+    make_value_pair(Value::Unknown, Unit::None);
 
 } // namespace
 
@@ -476,13 +486,13 @@ public:
     Unit units { Unit::None }; // Current units of measurement
     unsigned char decimals { 0u }; // Number of decimals in textual representation
 
-    Filter filter_type { Filter::Median }; // Instead of using raw value, filter it through a filter object
-    BaseFilterPtr filter; // *cannot be empty*
+    Filter filter_type; // Instead of using raw value, filter it through a filter object
+    BaseFilterPtr filter; // *cannot be empty*, instance should be created based on the type above
 
     size_t read_count { 0 }; // Number of times 'last' was updated
 
-    double last { Value::Unknown }; // Last raw value from sensor (unfiltered)
-    double reported { Value::Unknown }; // Last reported value
+    ValuePair last { DefaultValuePair }; // Last 'read' value
+    ValuePair reported { DefaultValuePair }; // Last 'reported' value
 
     double min_delta { 0.0 }; // Minimum value change to report
     double max_delta { 0.0 }; // Maximum value change to report
@@ -810,6 +820,9 @@ static_assert(!is_convertible_base<KilovoltampereReactive, Voltampere>(), "");
 static_assert(is_convertible_base<Joule, WattSecond>(), "");
 
 static_assert(unit_cast<Joule>(KilowattHour{0.02}) == 72000.0, "");
+static_assert(unit_cast<Joule>(KilowattHour{3.611111111111111e-05}) == 130.0, "");
+static_assert(unit_cast<KilowattHour>(Joule{1080000.0}) == 0.3, "");
+static_assert(unit_cast<KilowattHour>(Joule{12348000.0}) == 3.43, "");
 static_assert(unit_cast<VoltampereReactive>(KilovoltampereReactive{1234.0}) == 1234000.0, "");
 
 constexpr bool supported(Unit unit) {
@@ -1337,13 +1350,21 @@ static constexpr double correction(unsigned char type) {
 
 } // namespace build
 
-String format(const Magnitude& magnitude, double value) {
+String format(double value, unsigned char decimals) {
     // XXX: dtostrf only handles basic floating point values and will never produce scientific notation
     //      ensure decimals is within some sane limit and the actual value never goes above this buffer size
     char buffer[64];
-    dtostrf(value, 1, magnitude.decimals, buffer);
+    dtostrf(value, 1, decimals, buffer);
 
     return buffer;
+}
+
+String format(const Magnitude& magnitude, double value) {
+    return format(value, magnitude.decimals);
+}
+
+String format(const Magnitude& magnitude, ValuePair value) {
+    return format(magnitude, value.value);
 }
 
 String name(unsigned char type) {
@@ -1709,24 +1730,29 @@ unsigned char decimals(Unit unit) {
     return 0;
 }
 
-double process(const Magnitude& magnitude, double value) {
-    // Process input (sensor) units and convert to the ones that magnitude specifies as output
-    const auto sensor_units = magnitude.sensor->units(magnitude.slot);
-    if (sensor_units != magnitude.units) {
+// Process input (sensor) units and convert to the ones that magnitude specifies as output
+ValuePair process(const Magnitude& magnitude, double value, Unit units) {
+    auto out = make_value_pair(value, units);
+
+    if (units != magnitude.units) {
         using namespace sensor::convert;
-        if (temperature::supported(sensor_units) && temperature::supported(magnitude.units)) {
-            value = temperature::convert(value, sensor_units, magnitude.units);
-        } else if (metric::supported(sensor_units) && metric::supported(magnitude.units)) {
-            value = metric::convert(value, sensor_units, magnitude.units);
+        if (temperature::supported(units) && temperature::supported(magnitude.units)) {
+            out.value = temperature::convert(value, units, magnitude.units);
+        } else if (metric::supported(units) && metric::supported(magnitude.units)) {
+            out.value = metric::convert(value, units, magnitude.units);
         }
+        out.units = magnitude.units;
     }
 
-    // Right now, correction is a simple offset.
-    // TODO: math expression?
-    value = value + magnitude.correction;
+    // Input value might have more decimal points than necessary.
+    out.value = roundTo(out.value, magnitude.decimals);
 
-    // RAW value might have more decimal points than necessary.
-    return roundTo(value, magnitude.decimals);
+    return out;
+}
+
+ValuePair process(const Magnitude& magnitude, ValuePair value) {
+    return process(magnitude, value.value,
+        magnitude.sensor->units(magnitude.slot));
 }
 
 namespace internal {
@@ -1768,10 +1794,6 @@ const Magnitude* find(unsigned char type, unsigned char index) {
     }
 
     return out;
-}
-
-Unit units(size_t index) {
-    return internal::magnitudes[index].units;
 }
 
 unsigned char error(size_t index) {
@@ -1841,16 +1863,20 @@ Info info(const Magnitude& magnitude) {
     };
 }
 
-Value value(const Magnitude& magnitude, double value) {
+Value value(const Magnitude& magnitude, double value, Unit units) {
     return Value{
         .type = magnitude.type,
         .index = magnitude.index_global,
-        .units = magnitude.units,
+        .units = units,
         .decimals = magnitude.decimals,
         .topic = topicWithIndex(magnitude),
         .value = value,
         .repr = format(magnitude, value),
     };
+}
+
+Value value(const Magnitude& magnitude, ValuePair value) {
+    return magnitude::value(magnitude, value.value, value.units);
 }
 
 template <typename T>
@@ -1888,10 +1914,6 @@ Value safe_value_reported(size_t index) {
         [](const Magnitude& magnitude) {
             return magnitude.reported;
         });
-}
-
-bool ready_to_report(const Magnitude& magnitude) {
-    return magnitude.read_count == 0;
 }
 
 } // namespace magnitude
@@ -2831,6 +2853,26 @@ void setup(unsigned char type) {
 
 } // namespace units
 
+namespace magnitude {
+
+String format_with_units(const Magnitude& magnitude, const ValuePair& pair) {
+    String out;
+
+    if (std::isnan(pair.value)) {
+        out += STRING_VIEW("nan").toString();
+        return out;
+    }
+
+    out += magnitude::format(magnitude, pair.value);
+    if (pair.units != Unit::None) {
+        out += units::name(pair.units);
+    }
+
+    return out;
+}
+
+} // namespace magnitude
+
 // -----------------------------------------------------------------------------
 // Energy persistence
 // -----------------------------------------------------------------------------
@@ -3490,11 +3532,11 @@ void magnitudes(JsonObject& root) {
     payload(STRING_VIEW("values"), magnitude::count(), {
         {STRING_VIEW("value"), [](JsonArray& out, size_t index) {
             const auto& magnitude = magnitude::get(index);
-            out.add(magnitude::format(magnitude,
-                magnitude::process(magnitude, magnitude.last)));
+            out.add(magnitude::format(magnitude, magnitude.last));
         }},
         {STRING_VIEW("units"), [](JsonArray& out, size_t index) {
-            out.add(static_cast<int>(magnitude::units(index)));
+            const auto& magnitude = magnitude::get(index);
+            out.add(static_cast<int>(magnitude.last.units));
         }},
         {STRING_VIEW("error"), [](JsonArray& out, size_t index) {
             out.add(magnitude::error(index));
@@ -3638,8 +3680,8 @@ void setup() {
             for (auto& magnitude : magnitude::internal::magnitudes) {
                 JsonArray& data = magnitudes.createNestedArray();
                 data.add(sensor::magnitude::topicWithIndex(magnitude));
-                data.add(magnitude.last);
-                data.add(magnitude.reported);
+                data.add(magnitude.last.value);
+                data.add(magnitude.reported.value);
             }
             return true;
         },
@@ -3753,12 +3795,11 @@ void magnitudes(::terminal::CommandContext&& ctx) {
 
     size_t index = 0;
     for (const auto& magnitude : magnitude::internal::magnitudes) {
-        ctx.output.printf_P(PSTR("%2zu * %s @ %s (read:%s reported:%s units:%s)\n"),
+        ctx.output.printf_P(PSTR("%2zu * %s @ %s (read %s reported %s)\n"),
             index++, magnitude::topicWithIndex(magnitude).c_str(),
             magnitude::description(magnitude).c_str(),
-            magnitude::format(magnitude, magnitude.last).c_str(),
-            magnitude::format(magnitude, magnitude.reported).c_str(),
-            units::name(magnitude).c_str());
+            magnitude::format_with_units(magnitude, magnitude.last).c_str(),
+            magnitude::format_with_units(magnitude, magnitude.reported).c_str());
     }
 
     terminalOK(ctx);
@@ -3816,7 +3857,7 @@ void energy(::terminal::CommandContext&& ctx) {
     if (ctx.argv.size() == 2) {
         ctx.output.printf_P(PSTR("%s => %s (%s)\n"),
             magnitude::topicWithIndex(*magnitude).c_str(),
-            magnitude::format(*magnitude, magnitude->reported).c_str(),
+            magnitude::format(*magnitude, magnitude->reported.value).c_str(),
             units::name(*magnitude).c_str());
         terminalOK(ctx);
         return;
@@ -4176,13 +4217,21 @@ void loop() {
         const bool relay_off = (relayCount() == 1) && (relayStatus(0) == 0);
 #endif
 
+        // Report every Nth reading
+        const auto report_every = reportEvery();
+
         // Pre-read hook, called every reading
         sensor::pre();
 
         // Notify about sensor errors that may have been updated by pre()
         sensor::error();
 
-        auto value = sensor::ReadValue{};
+        // Current magnitude reading state
+        struct {
+            ValuePair raw;       // as the sensor returns it
+            ValuePair processed; // after applying units and decimals
+            ValuePair report;    // value to be reported (either processed, or filtered)
+        } state;
 
         for (size_t index = 0; index < magnitude::count(); ++index) {
             auto& magnitude = magnitude::get(index);
@@ -4192,10 +4241,13 @@ void loop() {
                 continue;
             }
 
-            // RAW value, returned from the sensor
-            value.raw = magnitude.sensor->value(magnitude.slot);
+            // Value from the sensor as-is
+            state.raw = ValuePair{
+                .value = magnitude.sensor->value(magnitude.slot),
+                .units = magnitude.sensor->units(magnitude.slot),
+            };
 
-            // But, completely remove spurious values if relay is OFF
+            // Completely remove spurious values if relay is OFF
 #if RELAY_SUPPORT && SENSOR_POWER_CHECK_STATUS
             switch (magnitude.type) {
             case MAGNITUDE_POWER_ACTIVE:
@@ -4205,7 +4257,7 @@ void loop() {
             case MAGNITUDE_CURRENT:
             case MAGNITUDE_ENERGY_DELTA:
                 if (relay_off) {
-                    value.raw = 0.0;
+                    state.raw.value = 0.0;
                 }
                 break;
             default:
@@ -4213,76 +4265,102 @@ void loop() {
             }
 #endif
 
-            // We also check that value is above a certain threshold
-            if ((!std::isnan(magnitude.zero_threshold)) && ((value.raw < magnitude.zero_threshold))) {
-                continue;
+            // Apply units and correct number of decimals (directly modifies the double value)
+            state.processed = magnitude::process(magnitude, state.raw);
+
+            // Absolute value correction. *Unconditional*, value is always offset by this amount
+            state.processed.value += magnitude.correction;
+
+            // In case units change occured, make sure filter receives the same unit type
+            if (magnitude.last.units != state.processed.units) {
+                magnitude.filter->reset();
             }
 
-            magnitude.read_count = (magnitude.read_count + 1) % reportEvery();
+            magnitude.filter->update(state.processed.value);
 
-            magnitude.last = value.raw;
-            magnitude.filter->update(value.raw);
+            // Making last reading available in API and for external listeners
+            magnitude.last = state.processed;
+            magnitude::read(magnitude::value(magnitude, state.processed));
 
-            // Procesing (units and decimals)
-            value.processed = magnitude::process(magnitude, value.raw);
-            magnitude::read(magnitude::value(magnitude, value.processed));
+            // At this point, we should decide whether this value should be reported.
+            // First, increment read counter and check for overflow.
+            const auto read_count = magnitude.read_count;
+            magnitude.read_count = (read_count + 1) % report_every;
 
-            // Initial status or after report counter overflows
-            bool report { magnitude::ready_to_report(magnitude) };
+            bool report { 0 == magnitude.read_count };
 
-            // In case magnitude was configured with ${name}MaxDelta, override report check
-            // when the value change is greater than the delta
-            if (!std::isnan(magnitude.reported) && (magnitude.max_delta > build::DefaultMaxDelta)) {
-                report = std::abs(value.processed - magnitude.reported) >= magnitude.max_delta;
-            }
-
-            // Special case for energy, save readings to RAM and EEPROM
+            // Special case for energy, save current readings to
+            // - RTC memory (always)
+            // - Internal flash (optionally, when reporting)
             if (MAGNITUDE_ENERGY == magnitude.type) {
                 energy::update(magnitude, report);
             }
 
+            // Ensure that reported value change is greater or equal to this delta value
+            const bool compare_min_delta { magnitude.min_delta > build::DefaultMinDelta };
+            report = report || compare_min_delta;
+
+            // Ensure that reported value change is less or equal to this delta value
+            const bool compare_max_delta { magnitude.max_delta > build::DefaultMaxDelta };
+            report = report || compare_max_delta;
+
+            // Ensure that report value is greater than this threshold value
+            const bool check_zero_threshold { !std::isnan(magnitude.zero_threshold) };
+            report = report || check_zero_threshold;
+
             if (report) {
-                value.filtered = magnitude::process(magnitude, magnitude.filter->value());
-
-                // Make sure that report value is calculated using every read value before it
-                magnitude.filter->reset();
-
-                // Check ${name}MinDelta if there is a minimum change threshold to report
-                if (std::isnan(magnitude.reported) || (std::abs(value.filtered - magnitude.reported) >= magnitude.min_delta)) {
-                    const auto report = magnitude::value(magnitude, value.filtered);
-                    magnitude::report(report);
-
-#if MQTT_SUPPORT
-                    mqtt::report(report, magnitude);
-#endif
-#if THINGSPEAK_SUPPORT
-                    tspkEnqueueMagnitude(index, report.repr);
-#endif
-#if DOMOTICZ_SUPPORT
-                    domoticzSendMagnitude(index, report);
-#endif
-                    magnitude.reported = value.filtered;
+                if (magnitude.filter->ready()) {
+                    state.report = ValuePair{
+                        .value = magnitude.filter->value(),
+                        .units = state.processed.units,
+                    };
+                    magnitude.filter->restart();
+                } else {
+                    state.report = state.processed;
                 }
 
+                const bool previous_report { !std::isnan(magnitude.reported.value) };
+
+                if (report && previous_report && compare_min_delta) {
+                    report = std::abs(state.report.value - magnitude.reported.value)
+                        >= magnitude.min_delta;
+                }
+
+                if (report && previous_report && compare_max_delta) {
+                    report = std::abs(state.report.value - magnitude.reported.value)
+                        <= magnitude.max_delta;
+                }
+
+                if (report && check_zero_threshold) {
+                    report = state.report.value >= magnitude.zero_threshold;
+                }
+            }
+
+            // If flag was not reset by the checks above, continue and finally report the value
+            if (report) {
+                const auto value = magnitude::value(magnitude, state.report);
+
+                magnitude.reported = state.report;
+                magnitude::report(value);
+
+#if MQTT_SUPPORT
+                mqtt::report(value, magnitude);
+#endif
+#if THINGSPEAK_SUPPORT
+                tspkEnqueueMagnitude(index, value.repr);
+#endif
+#if DOMOTICZ_SUPPORT
+                domoticzSendMagnitude(index, value);
+#endif
             }
 
 #if SENSOR_DEBUG
             {
-                auto withUnits = [&](double value, Unit units) {
-                    String out;
-                    out += magnitude::format(magnitude, value);
-                    if (units != Unit::None) {
-                        out += units::name(units);
-                    }
-
-                    return out;
-                };
-
-                DEBUG_MSG_P(PSTR("[SENSOR] %s -> raw %s processed %s filtered %s\n"),
+                DEBUG_MSG_P(PSTR("[SENSOR] %s -> raw %s processed %s report %s\n"),
                     magnitude::topic(magnitude).c_str(),
-                    withUnits(value.raw, magnitude.sensor->units(magnitude.slot)).c_str(),
-                    withUnits(value.processed, magnitude.units).c_str(),
-                    withUnits(value.filtered, magnitude.units).c_str());
+                    magnitude::format_with_units(magnitude, state.raw).c_str(),
+                    magnitude::format_with_units(magnitude, state.processed).c_str(),
+                    magnitude::format_with_units(magnitude, state.report).c_str());
             }
 #endif
         }
