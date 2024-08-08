@@ -225,6 +225,7 @@ Copyright (C) 2020-2022 by Maxim Prokhorov <prokhorov dot max at outlook dot com
 #include "filters/LastFilter.h"
 #include "filters/MaxFilter.h"
 #include "filters/MedianFilter.h"
+#include "filters/MinFilter.h"
 #include "filters/MovingAverageFilter.h"
 #include "filters/SumFilter.h"
 
@@ -889,6 +890,7 @@ namespace filters {
 PROGMEM_STRING(Last, "last");
 PROGMEM_STRING(Max, "max");
 PROGMEM_STRING(Median, "median");
+PROGMEM_STRING(Min, "min");
 PROGMEM_STRING(MovingAverage, "moving-average");
 PROGMEM_STRING(Sum, "sum");
 
@@ -896,6 +898,7 @@ static constexpr espurna::settings::options::Enumeration<Filter> Options[] PROGM
     {Filter::Last, Last},
     {Filter::Max, Max},
     {Filter::Median, Median},
+    {Filter::Min, Min},
     {Filter::MovingAverage, MovingAverage},
     {Filter::Sum, Sum},
 };
@@ -1644,14 +1647,17 @@ BaseFilterPtr makeFilter(Filter filter) {
     case Filter::Max:
         out = std::make_unique<MaxFilter>();
         break;
-    case Filter::Sum:
-        out = std::make_unique<SumFilter>();
+    case Filter::Median:
+        out = std::make_unique<MedianFilter>();
+        break;
+    case Filter::Min:
+        out = std::make_unique<MinFilter>();
         break;
     case Filter::MovingAverage:
         out = std::make_unique<MovingAverageFilter>();
         break;
-    case Filter::Median:
-        out = std::make_unique<MedianFilter>();
+    case Filter::Sum:
+        out = std::make_unique<SumFilter>();
         break;
     }
 

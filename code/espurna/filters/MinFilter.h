@@ -9,13 +9,13 @@
 
 #include <algorithm>
 
-class MaxFilter : public BaseFilter {
+class MinFilter : public BaseFilter {
 public:
     void update(double value) override {
         if (!_status) {
             _value = value;
         } else {
-            _value = std::max(value, _value);
+            _value = std::min(value, _value);
         }
         _status = true;
     }
