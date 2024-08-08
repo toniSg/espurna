@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
 // Max Filter
 // Copyright (C) 2017-2019 by Xose Pérez <xose dot perez at gmail dot com>
+// Copyright (C) 2023-2024 by Maxim Prokhorov <prokhorov dot max at outlook dot com>
 // -----------------------------------------------------------------------------
 
 #pragma once
@@ -20,16 +21,20 @@ public:
         _status = true;
     }
 
-    bool status() const override {
+    bool available() const override {
         return _status;
     }
 
-    void resize(size_t) override {
-        _reset();
+    bool ready() const override {
+        return _status;
     }
 
     void reset() override {
-        _reset();
+        _status = false;
+    }
+
+    void restart() override {
+        _status = false;
     }
 
     double value() const override {
@@ -37,10 +42,6 @@ public:
     }
 
 private:
-    void _reset() {
-        _status = false;
-    }
-
     double _value { 0 };
     bool _status { false };
 };
