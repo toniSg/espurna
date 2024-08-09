@@ -496,8 +496,12 @@ public:
 
     double min_delta { 0.0 }; // Minimum value change to report
     double max_delta { 0.0 }; // Maximum value change to report
-    double correction { 0.0 }; // Value correction (applied when processing)
-    double zero_threshold { Value::Unknown }; // Reset value to zero when below threshold (applied when reading)
+                               //
+    double min_threshold { Value::Unknown }; // Minimum value to report
+    double max_threshold { Value::Unknown }; // Maximum value to report
+
+    double zero_threshold { Value::Unknown }; // Reset value to zero when equal or below threshold (applied when reading)
+    double correction { 0.0 }; // Value correction (applied when reading)
 };
 
 static_assert(
@@ -1078,6 +1082,10 @@ PROGMEM_STRING(MinDelta, "MinDelta");
 PROGMEM_STRING(Precision, "Precision");
 PROGMEM_STRING(Ratio, "Ratio");
 PROGMEM_STRING(Units, "Units");
+
+PROGMEM_STRING(MinThreshold, "MinThreshold");
+PROGMEM_STRING(MaxThreshold, "MaxThreshold");
+
 PROGMEM_STRING(ZeroThreshold, "ZeroThreshold");
 
 PROGMEM_STRING(Mains, "Mains");
@@ -3449,6 +3457,14 @@ void list(JsonObject& root) {
     });
 }
 
+void threshold_or_nan(JsonArray& out, const double& threshold) {
+    if (!std::isnan(threshold)) {
+        out.add(threshold);
+    } else {
+        out.add("NaN");
+    }
+}
+
 void settings(JsonObject& root) {
     if (!sensor::ready()) {
         return;
@@ -3457,7 +3473,7 @@ void settings(JsonObject& root) {
     // XXX: inject 'null' in the output. need this for optional fields, since the current
     // version of serializer only does this for char ptr and even makes NaN serialized as
     // NaN, instead of more commonly used null (but, expect this to be fixed after switching to v6+)
-    static const char* const NullSymbol { nullptr };
+    constexpr char* const NullSymbol { nullptr };
 
     espurna::web::ws::EnumerablePayload payload{root, STRING_VIEW("magnitudes-settings")};
     payload(STRING_VIEW("values"), magnitude::count(),
@@ -3479,11 +3495,15 @@ void settings(JsonObject& root) {
         }},
         {settings::suffix::ZeroThreshold, [](JsonArray& out, size_t index) {
             const auto threshold = magnitude::get(index).zero_threshold;
-            if (!std::isnan(threshold)) {
-                out.add(threshold);
-            } else {
-                out.add("NaN");
-            }
+            threshold_or_nan(out, threshold);
+        }},
+        {settings::suffix::MinThreshold, [](JsonArray& out, size_t index) {
+            const auto threshold = magnitude::get(index).min_threshold;
+            threshold_or_nan(out, threshold);
+        }},
+        {settings::suffix::MaxThreshold, [](JsonArray& out, size_t index) {
+            const auto threshold = magnitude::get(index).max_threshold;
+            threshold_or_nan(out, threshold);
         }},
         {settings::suffix::MinDelta, [](JsonArray& out, size_t index) {
             out.add(magnitude::get(index).min_delta);
@@ -3964,11 +3984,10 @@ void configure_magnitude(Magnitude& magnitude) {
                     : magnitude::decimals(magnitude.units));
     }
 
-    // Per-magnitude min & max delta settings for reporting the value
-    // - ${prefix}MinDelta${index} controls whether we report when report counter overflows
-    //   (default is set to 0.0 aka value has changed from the last recorded one)
-    // - ${prefix}MaxDelta${index} will trigger report as soon as read value is greater than the specified delta
-    //   (default is 0.0 as well, but this needs to be >0 to actually do something)
+    // Per-magnitude min & max delta of the report value, may trigger reports independent of the read counter overflow
+    // - ${prefix}MinDelta${index} for value change greater than or equal to the specified delta
+    // - ${prefix}MaxDelta${index} for value change less than or equal to the specified delta
+    // Both are 0. by default, meaning these checks are ignored when processing read data
     magnitude.min_delta = getSetting(
         settings::keys::get(magnitude, settings::suffix::MinDelta),
         build::DefaultMinDelta);
@@ -3976,9 +3995,17 @@ void configure_magnitude(Magnitude& magnitude) {
         settings::keys::get(magnitude, settings::suffix::MaxDelta),
         build::DefaultMaxDelta);
 
-    // Sometimes we want to ensure the value is above certain threshold before reporting
+    // Overwrite value with 0 when below a certain threshold. Happens when report is triggered, before any further checks
     magnitude.zero_threshold = getSetting(
         settings::keys::get(magnitude, settings::suffix::ZeroThreshold),
+        Value::Unknown);
+
+    // Per-magnitude min & max checks of the report value
+    magnitude.min_threshold = getSetting(
+        settings::keys::get(magnitude, settings::suffix::MinThreshold),
+        Value::Unknown);
+    magnitude.max_threshold = getSetting(
+        settings::keys::get(magnitude, settings::suffix::MaxThreshold),
         Value::Unknown);
 
     // When we don't save energy, purge existing value in both RAM & settings
@@ -4175,6 +4202,66 @@ bool ready_to_read() {
     return internal::read_flag.wait(internal::read_interval);
 }
 
+bool ready_to_report(ValuePair& out, const ValuePair& processed, const Magnitude& magnitude, bool report) {
+    // Ensure that reported value change is greater or equal to this delta value
+    const bool compare_min_delta { magnitude.min_delta > build::DefaultMinDelta };
+    report = report || compare_min_delta;
+
+    // Ensure that reported value change is less or equal to this delta value
+    const bool compare_max_delta { magnitude.max_delta > build::DefaultMaxDelta };
+    report = report || compare_max_delta;
+
+    // Ensure that reported value is greater than or equal to this value
+    const bool check_min_threshold { !std::isnan(magnitude.min_threshold) };
+    report = report || check_min_threshold;
+
+    // Ensure that reported value is less than or equal to this value
+    const bool check_max_threshold { !std::isnan(magnitude.max_threshold) };
+    report = report || check_max_threshold;
+
+    // Figure out whether report value is zero or not
+    const bool check_zero_threshold { !std::isnan(magnitude.zero_threshold) };
+    report = report || check_zero_threshold;
+
+    if (report) {
+        if (magnitude.filter->ready()) {
+            out = ValuePair{
+                .value = magnitude.filter->value(),
+                .units = processed.units,
+            };
+            magnitude.filter->restart();
+        } else {
+            out = processed;
+        }
+
+        if (check_zero_threshold && out.value < magnitude.zero_threshold) {
+            out.value = 0.0;
+        }
+
+        const bool previous_report { !std::isnan(magnitude.reported.value) };
+
+        if (report && previous_report && compare_min_delta) {
+            report = std::abs(out.value - magnitude.reported.value)
+                >= magnitude.min_delta;
+        }
+
+        if (report && previous_report && compare_max_delta) {
+            report = std::abs(out.value - magnitude.reported.value)
+                <= magnitude.max_delta;
+        }
+
+        if (report && check_min_threshold) {
+            report = out.value >= magnitude.min_threshold;
+        }
+
+        if (report && check_max_threshold) {
+            report = out.value <= magnitude.max_threshold;
+        }
+    }
+
+    return report;
+}
+
 void loop() {
     // TODO: allow to do nothing
     if (internal::state == State::Idle) {
@@ -4296,45 +4383,10 @@ void loop() {
                 energy::update(magnitude, report);
             }
 
-            // Ensure that reported value change is greater or equal to this delta value
-            const bool compare_min_delta { magnitude.min_delta > build::DefaultMinDelta };
-            report = report || compare_min_delta;
-
-            // Ensure that reported value change is less or equal to this delta value
-            const bool compare_max_delta { magnitude.max_delta > build::DefaultMaxDelta };
-            report = report || compare_max_delta;
-
-            // Ensure that report value is greater than this threshold value
-            const bool check_zero_threshold { !std::isnan(magnitude.zero_threshold) };
-            report = report || check_zero_threshold;
-
-            if (report) {
-                if (magnitude.filter->ready()) {
-                    state.report = ValuePair{
-                        .value = magnitude.filter->value(),
-                        .units = state.processed.units,
-                    };
-                    magnitude.filter->restart();
-                } else {
-                    state.report = state.processed;
-                }
-
-                const bool previous_report { !std::isnan(magnitude.reported.value) };
-
-                if (report && previous_report && compare_min_delta) {
-                    report = std::abs(state.report.value - magnitude.reported.value)
-                        >= magnitude.min_delta;
-                }
-
-                if (report && previous_report && compare_max_delta) {
-                    report = std::abs(state.report.value - magnitude.reported.value)
-                        <= magnitude.max_delta;
-                }
-
-                if (report && check_zero_threshold) {
-                    report = state.report.value >= magnitude.zero_threshold;
-                }
-            }
+            // Prepare and verify report value before proceeding
+            report = ready_to_report(
+                state.report, state.processed,
+                magnitude, report);
 
             // If flag was not reset by the checks above, continue and finally report the value
             if (report) {

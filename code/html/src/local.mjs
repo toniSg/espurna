@@ -315,19 +315,21 @@ export function init() {
     updateVariables({
         'magnitudes-settings': {
             values: [
-                [0,null,"NaN",0,0],
-                [0,null,"NaN",0,0],
-                [0,null,"NaN",0,0],
-                [0,null,"NaN",0,0],
-                [0,1,"NaN",0,0],
-                [0,1,"NaN",0,0],
-                [0,1,"NaN",0,0],
-                [null,1,"NaN",0,0],
-                [null,null,"NaN",0,0],
+                [0,null,1,"NaN","NaN",0,0],
+                [0,null,"NaN",2,"NaN",0,0],
+                [0,null,"NaN","NaN",3,0,0],
+                [0,null,"NaN","NaN","NaN",0,0],
+                [0,1,"NaN","NaN",4,0,0],
+                [0,1,"NaN",5,"NaN",0,0],
+                [0,1,6,"NaN","NaN",0,0],
+                [null,1,"NaN","NaN","NaN",0,0],
+                [null,null,1,2,3,0,0],
             ],
             schema: [
                 "Correction",
                 "Ratio",
+                "MinThreshold",
+                "MaxThreshold",
                 "ZeroThreshold",
                 "MinDelta",
                 "MaxDelta"
