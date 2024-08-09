@@ -522,15 +522,6 @@ bool handle_delta(Context& ctx, const Pending& pending) {
     return false;
 }
 
-bool handle_delta(Context& ctx, decltype(Context::pending)::iterator it) {
-    if (handle_delta(ctx, *it)) {
-        ctx.pending.erase(it);
-        return true;
-    }
-
-    return false;
-}
-
 } // namespace restore
 
 } // namespace

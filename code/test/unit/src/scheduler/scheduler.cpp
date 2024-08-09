@@ -522,9 +522,9 @@ void test_restore_delta_past() {
         TEST_ASSERT_EQUAL(1, ctx.pending.size());
 
         TEST_ASSERT_TRUE(
-            restore::handle_delta(ctx, ctx.pending.begin()));
+            restore::handle_delta(ctx, ctx.pending[0]));
         TEST_ASSERT_EQUAL(1, ctx.results.size());
-        TEST_ASSERT_EQUAL(0, ctx.pending.size());
+        TEST_ASSERT_EQUAL(1, ctx.pending.size());
 
         TEST_ASSERT_EQUAL(test.index, ctx.results[0].index);
         TEST_ASSERT_EQUAL(
@@ -532,6 +532,7 @@ void test_restore_delta_past() {
             ctx.results[0].offset.count());
 
         ctx.results.clear();
+        ctx.pending.clear();
     }
 }
 
