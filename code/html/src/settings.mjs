@@ -119,11 +119,27 @@ function getGroupPending(elem) {
     return raw.split(" ");
 }
 
+const SETTINGS_GROUP_ELEMENT = "settingsGroupElement";
+
 /**
  * @param {HTMLElement} elem
  */
-function isGroupElement(elem) {
-    return elem.dataset["settingsGroupElement"] !== undefined;
+export function setGroupElement(elem) {
+    elem.dataset[SETTINGS_GROUP_ELEMENT] = "true";
+}
+
+/**
+ * @param {HTMLElement} elem
+ */
+export function resetGroupElement(elem) {
+    delete elem.dataset[SETTINGS_GROUP_ELEMENT];
+}
+
+/**
+ * @param {HTMLElement} elem
+ */
+export function isGroupElement(elem) {
+    return elem.dataset[SETTINGS_GROUP_ELEMENT] !== undefined;
 }
 
 /**

@@ -6,10 +6,11 @@ import {
 
 import {
     addEnumerables,
-    prepareEnumerableTarget,
+    initSelect,
     listenEnumerableName,
     listenEnumerableTarget,
-    initSelect,
+    prepareEnumerableTarget,
+    resetGroupElement,
     setChangedElement,
     setOriginalFromValue,
     setSelectValue,
@@ -389,6 +390,7 @@ function initMagnitudeNumberSetting(containerId, id, keySuffix, value, {required
             input.max = max;
             input.value = value.toString();
 
+            resetGroupElement(input);
             setOriginalFromValue(input);
             listenEnumerableMagnitudeDescription(span, id);
         }));
@@ -537,7 +539,7 @@ function initMagnitudesSettings(values, schema) {
                     `magnitude-${type.toLowerCase()}-thresholds`, id,
                     key, threshold, {
                         required: false,
-                        min: (type == "Zero") ? "0" : undefined
+                        min: (type === "Zero") ? "0" : undefined
                     });
             }
         }
