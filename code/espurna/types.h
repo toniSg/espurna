@@ -85,7 +85,7 @@ struct Callback {
 
     // when T *can* be converted into Callback::Type
     // usually, function pointer *or* lambda without capture list
-    template <typename T, 
+    template <typename T,
               typename = typename std::enable_if<
                   is_type<T>::value
                || type_convertible<T>::value>::type>
@@ -95,7 +95,7 @@ struct Callback {
     {}
 
     // anything else convertible into std function
-    template <typename T, 
+    template <typename T,
               typename = typename std::enable_if<
                 !is_callback<T>::value>::type,
               typename = typename std::enable_if<

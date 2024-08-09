@@ -53,7 +53,7 @@ public:
             });
         _values.insert(upper, pending);
     }
-        
+
     double value() const override {
         // Special case when early report triggers value read
         if (_values.size() == 1) {
