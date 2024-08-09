@@ -56,6 +56,15 @@ beforeAll(() => {
                 <input name="bar" type="text" ></input>
             </fieldset>
         </template>`;
+
+    document.body.innerHTML += `
+    <form id="numbers-and-nan-strings">
+        <input name="number:a" type="number">
+        <input name="number:b" type="number">
+        <input name="number:c" type="number">
+        <input name="number:d" type="number">
+    </form>
+    `;
 });
 
 /**
@@ -259,8 +268,8 @@ test('settings group remove', () => {
         .toEqual({
             bar1: 'barfoobar',
             bar2: '',
-            foo1: '3333333',
-            foo2: '4444444',
+            foo1: 3333333,
+            foo2: 4444444,
         });
 
     // extra row is always at the end. because add event was triggered,
@@ -278,9 +287,9 @@ test('settings group remove', () => {
         .toEqual({
             bar1: 'barfoobar',
             bar2: '',
-            foo1: '3333333',
-            foo2: '4444444',
-            foo3: '5555555',
+            foo1: 3333333,
+            foo2: 4444444,
+            foo3: 5555555,
         });
 
     addFromTemplate(remove, 'group', {foo: '6666666', bar: 'yyyyyyy'});
@@ -320,10 +329,10 @@ test('settings group remove', () => {
             bar1: '',
             bar2: 'ttttttt',
             bar3: 'yyyyyyy',
-            foo0: '3333333',
-            foo1: '4444444',
-            foo2: '5555555',
-            foo3: '6666666',
+            foo0: 3333333,
+            foo1: 4444444,
+            foo2: 5555555,
+            foo3: 6666666,
         });
 
     while (remove.firstElementChild instanceof HTMLFieldSetElement) {
@@ -380,4 +389,24 @@ test('settings group schema remove', () => {
         ]));
     expect(data.set)
         .toEqual({});
+});
+
+test('number inputs without data consistently serialize as nan string', () => {
+    const form = document.forms.namedItem("numbers-and-nan-strings");
+    assert(form instanceof HTMLFormElement);
+
+    initInputKeyValueElement("number:a", 12345);
+    initInputKeyValueElement("number:d", 56789);
+
+    const data = getData([form], {assumeChanged: true});
+    expect(data.del.length)
+        .toEqual(0);
+    expect(Object.keys(data.set))
+        .toEqual(expect.arrayContaining(
+            ['number:a', 'number:b', 'number:c', 'number:d']));
+
+    expect(data.set["number:a"]).toEqual(12345);
+    expect(data.set["number:b"]).toEqual("nan");
+    expect(data.set["number:c"]).toEqual("nan");
+    expect(data.set["number:d"]).toEqual(56789);
 });

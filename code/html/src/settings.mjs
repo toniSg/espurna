@@ -459,6 +459,13 @@ function maybeAdjustDataValue(value) {
         return value ? 1 : 0;
     }
 
+    if (typeof value === "string" && (value.length > 0)) {
+        const number = Number(value);
+        if (!Number.isNaN(number)) {
+            return number;
+        }
+    }
+
     if (typeof value === "number" && isNaN(value)) {
         return "nan";
     }
