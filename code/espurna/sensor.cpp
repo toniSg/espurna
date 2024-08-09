@@ -496,7 +496,7 @@ public:
 
     double min_delta { 0.0 }; // Minimum value change to report
     double max_delta { 0.0 }; // Maximum value change to report
-                               //
+
     double min_threshold { Value::Unknown }; // Minimum value to report
     double max_threshold { Value::Unknown }; // Maximum value to report
 
