@@ -54,7 +54,7 @@ export function resetChangedElement(elem) {
  * @param {HTMLElement} elem
  */
 function resetGroupPending(elem) {
-    elem.dataset["settingsGroupPending"] = "";
+    delete elem.dataset["settingsGroupPending"];
 }
 
 // Right now, group additions happen from:
@@ -137,16 +137,34 @@ export function resetGroupElement(elem) {
 
 /**
  * @param {HTMLElement} elem
+ * @returns {boolean}
  */
 export function isGroupElement(elem) {
     return elem.dataset[SETTINGS_GROUP_ELEMENT] !== undefined;
 }
 
+const SETTINGS_IGNORED_ELEMENT = "settingsIgnore";
+
 /**
  * @param {HTMLElement} elem
  */
-function isIgnoredElement(elem) {
-    return elem.dataset["settingsIgnore"] !== undefined;
+export function setIgnoredElement(elem) {
+    elem.dataset[SETTINGS_IGNORED_ELEMENT] = "true";
+}
+
+/**
+ * @param {HTMLElement} elem
+ */
+export function resetIgnoredElement(elem) {
+    delete elem.dataset[SETTINGS_IGNORED_ELEMENT];
+}
+
+/**
+ * @param {HTMLElement} elem
+ * @returns {boolean}
+ */
+export function isIgnoredElement(elem) {
+    return elem.dataset[SETTINGS_IGNORED_ELEMENT] !== undefined;
 }
 
 /**
@@ -433,6 +451,22 @@ function groupSettingsCleanup(container, keys) {
  */
 
 /**
+ * @param {string | number |boolean} value
+ * @returns {DataValue}
+ */
+function maybeAdjustDataValue(value) {
+    if (typeof value === "boolean") {
+        return value ? 1 : 0;
+    }
+
+    if (typeof value === "number" && isNaN(value)) {
+        return "nan";
+    }
+
+    return value;
+}
+
+/**
  * specific 'key' string to remove from the device settings storage
  * @typedef {string} DelRequest
  */
@@ -478,6 +512,10 @@ export function getData(forms, {cleanup = true, assumeChanged = false} = {}) {
                 continue;
             }
 
+            if (elem instanceof HTMLInputElement && elem.readOnly) {
+                continue;
+            }
+
             const name = elem.dataset["settingsRealName"] || elem.name;
             if (!name) {
                 continue;
@@ -506,11 +544,8 @@ export function getData(forms, {cleanup = true, assumeChanged = false} = {}) {
                 const data_name = group_element
                     ? group_name : name;
 
-                // TODO small value optimization, so booleans always take 1 byte in the resulting json
-                const data_value = (typeof value === "boolean")
-                    ? (value ? 1 : 0) : value;
-
-                data[data_name] = data_value;
+                // fixing outgoing data, when it is necessary
+                data[data_name] = maybeAdjustDataValue(value);
             }
         }
     }

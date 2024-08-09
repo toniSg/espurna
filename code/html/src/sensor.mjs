@@ -12,6 +12,7 @@ import {
     prepareEnumerableTarget,
     resetGroupElement,
     setChangedElement,
+    setIgnoredElement,
     setOriginalFromValue,
     setSelectValue,
     variableListeners,
@@ -428,6 +429,7 @@ function initMagnitudesExpected(id) {
     expected.name += info.key;
     expected.id = expected.name;
     expected.dataset["id"] = info.id.toString();
+    setIgnoredElement(expected);
 
     const [message] = /** @type {NodeListOf<HTMLSpanElement>} */
         (template.querySelectorAll(`span.emon-expected-${info.prefix}`));
