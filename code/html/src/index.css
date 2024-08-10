@@ -402,6 +402,10 @@ input.checkbox-toggle::before {
     transition: inherit;
 }
 
+input.checkbox-toggle ~ .pure-form-message {
+    margin-top: .625em;
+}
+
 /* module-light */
 input[name=light-state-value].checkbox-toggle {
     --toggle-color-off: black;
