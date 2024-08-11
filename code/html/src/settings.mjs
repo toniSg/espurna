@@ -1222,6 +1222,10 @@ export function initInputKeyValueElement(key, value) {
         if ((elem instanceof HTMLInputElement)
          || (elem instanceof HTMLSelectElement))
         {
+            if (isGroupElement(elem)) {
+                continue;
+            }
+
             setInputOrSelect(elem, value);
             inputs.push(elem);
         }
