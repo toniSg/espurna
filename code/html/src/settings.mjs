@@ -1188,12 +1188,16 @@ class SettingsBase {
 
 /**
  * read-only kv pairs. currently, this is span with a data-key=$key
+ * @param {Document | Element} node
  * @param {string} key
  * @param {DisplayValue} value
  */
-export function initDisplayKeyValueElement(key, value) {
-    const spans = /** @type {NodeListOf<HTMLSpanElement>} */(document.querySelectorAll(`span[data-key='${key}']`));
-    for (const span of spans) {
+export function setSpanValueByKey(node, key, value) {
+    for (const span of node.querySelectorAll(`span[data-key='${key}']`)) {
+        if (!(span instanceof HTMLSpanElement)) {
+            continue;
+        }
+
         setSpanValue(span, value);
     }
 }
@@ -1212,13 +1216,14 @@ function setInputOrSelect(elem, value) {
 
 /**
  * handle plain kv pairs when they are already on the page, and don't need special template handlers
+ * @param {Document | Element} node
  * @param {string} key
  * @param {ElementValue} value
  */
-export function initInputKeyValueElement(key, value) {
+export function setInputOrSelectValueByKey(node, key, value) {
     const inputs = [];
 
-    for (const elem of document.querySelectorAll(`[name='${key}'`)) {
+    for (const elem of node.querySelectorAll(`[name='${key}'`)) {
         if ((elem instanceof HTMLInputElement)
          || (elem instanceof HTMLSelectElement))
         {
@@ -1358,8 +1363,8 @@ export function updateKeyValue(key, value) {
         return;
     }
 
-    initDisplayKeyValueElement(key, value);
-    initInputKeyValueElement(key, value);
+    setSpanValueByKey(document, key, value);
+    setInputOrSelectValueByKey(document, key, value);
 }
 
 function resetOriginals() {
