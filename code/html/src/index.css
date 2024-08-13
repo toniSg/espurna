@@ -123,6 +123,11 @@ select {
     width: 100%;
 }
 
+select[multiple] {
+    overflow-y: auto;
+    resize: vertical;
+}
+
 input.center {
     margin-bottom: 0;
 }

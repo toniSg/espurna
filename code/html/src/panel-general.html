@@ -80,13 +80,13 @@
                     <label>Message interval</label>
                     <input name="hbInterval" type="number" min="1" required >
                     <span class="pure-form-message-inline">
-                        How often the heartbeat messages should be sent (number of <strong>seconds</strong>).
+                        s (seconds)
                     </span>
                 </div>
 
                 <div class="pure-control-group">
                     <label>Message types</label>
-                    <select multiple name="hbReport">
+                    <select multiple name="hbReport" size="21">
                         <option value="1">Device status</option>
                         <option value="2">SSID</option>
                         <option value="21">BSSID</option>
@@ -109,9 +109,6 @@
                         <option data-module="thermostat" value="19">Temperature range</option>
                         <option data-module="thermostat" value="20">Remote temperature</option>
                     </select>
-                    <span class="pure-form-message-inline">
-                        Select which message types will be sent out with the periodic report.
-                    </span>
                 </div>
             </fieldset>
 
