@@ -402,7 +402,7 @@ input.checkbox-toggle::before {
     transition: inherit;
 }
 
-input.checkbox-toggle ~ .pure-form-message {
+input.checkbox-toggle + .pure-form-message {
     margin-top: .625em;
 }
 
@@ -627,7 +627,12 @@ summary {
     font-size: 1.2em;
 }
 
-.password-reveal:after {
+.pure-form input[type="password"]:has(+ .password-reveal),
+.pure-form input[type="text"]:has(+ .password-reveal) {
+    display: inline-block;
+}
+
+.password-reveal::before {
     content: "👁";
 }
 
