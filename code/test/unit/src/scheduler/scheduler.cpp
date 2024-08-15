@@ -49,7 +49,7 @@ std::ostream& operator<<(std::ostream& out, const tm& t) {
         << ((t.tm_isdst == 1) ? " DST" : "");
 
     return out;
-};
+}
 
 namespace espurna {
 namespace scheduler {
@@ -427,20 +427,55 @@ void test_restore_today() {
     schedule.date.month[0] = true;
     schedule.date.year = 2006;
 
-    TEST_ASSERT_FALSE(handle_today(ctx, 0, schedule));
+    TEST_ASSERT_FALSE(restore::handle_today(ctx, 0, schedule));
     TEST_ASSERT_EQUAL(1, ctx.pending.size());
     TEST_ASSERT_EQUAL(0, ctx.results.size());
 
-    schedule.date = original_date;
-
+    ctx.results.clear();
     ctx.pending.clear();
 
-    TEST_ASSERT_TRUE(handle_today(ctx, 0, schedule));
+    schedule.date = original_date;
+
+    TEST_ASSERT_TRUE(restore::handle_today(ctx, 1, schedule));
     TEST_ASSERT_EQUAL(0, ctx.pending.size());
     TEST_ASSERT_EQUAL(1, ctx.results.size());
-    TEST_ASSERT_EQUAL(0, ctx.results[0].index);
+    TEST_ASSERT_EQUAL(1, ctx.results[0].index);
     TEST_ASSERT_EQUAL(
         datetime::Minutes(datetime::Hours(-7)).count(),
+        ctx.results[0].offset.count());
+
+    ctx.results.clear();
+    ctx.pending.clear();
+
+    schedule.time.hour.reset();
+    schedule.time.hour.set(ctx.current.utc.tm_hour);
+
+    schedule.time.minute.reset();
+    schedule.time.minute.set(ctx.current.utc.tm_min - 4);
+
+    TEST_ASSERT_TRUE(restore::handle_today(ctx, 2, schedule));
+    TEST_ASSERT_EQUAL(0, ctx.pending.size());
+    TEST_ASSERT_EQUAL(1, ctx.results.size());
+    TEST_ASSERT_EQUAL(2, ctx.results[0].index);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(-4).count(),
+        ctx.results[0].offset.count());
+
+    ctx.results.clear();
+    ctx.pending.clear();
+
+    schedule.time.hour.reset();
+    schedule.time.hour.set(ctx.current.utc.tm_hour - 1);
+
+    schedule.time.minute.reset();
+    schedule.time.minute.set(ctx.current.utc.tm_min + 30);
+
+    TEST_ASSERT_TRUE(restore::handle_today(ctx, 3, schedule));
+    TEST_ASSERT_EQUAL(0, ctx.pending.size());
+    TEST_ASSERT_EQUAL(1, ctx.results.size());
+    TEST_ASSERT_EQUAL(3, ctx.results[0].index);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(-30).count(),
         ctx.results[0].offset.count());
 }
 
@@ -534,6 +569,70 @@ void test_restore_delta_past() {
         ctx.results.clear();
         ctx.pending.clear();
     }
+}
+
+#define TEST_TIME_POINT_BOUNDARIES(X)\
+    TEST_ASSERT(((X).tm_hour >= 0) && ((X).tm_hour < 24));\
+    TEST_ASSERT(((X).tm_min >= 0) && ((X).tm_min < 60))
+
+void test_expect_today() {
+    MAKE_TIMEPOINT(time_point);
+    const auto original_time_point = time_point;
+
+    scheduler::TimeMatch m;
+    m.hour.set(time_point.tm_hour - 1);
+    m.minute.set(time_point.tm_min - 1);
+
+    datetime::Minutes offset{};
+    TEST_ASSERT_EQUAL(0, offset.count());
+
+    TEST_TIME_POINT_BOUNDARIES(time_point);
+    TEST_ASSERT_FALSE(expect::closest_delta(offset, m, time_point));
+    TEST_ASSERT_EQUAL(0, offset.count());
+
+    constexpr auto one_h = datetime::Hours(1);
+    m.hour.reset();
+    m.hour.set(time_point.tm_hour + one_h.count());
+
+    constexpr auto twenty_six_m = datetime::Minutes(26);
+    m.minute.reset();
+    m.minute.set(time_point.tm_min + twenty_six_m.count());
+
+    TEST_ASSERT_EQUAL(0, offset.count());
+    TEST_ASSERT(expect::closest_delta(offset, m, time_point));
+    TEST_ASSERT_EQUAL((one_h + twenty_six_m).count(), offset.count());
+
+    constexpr auto nine_h = datetime::Hours(9);
+    m.hour.reset();
+    m.hour.set(time_point.tm_hour);
+
+    constexpr auto thirty_m = datetime::Minutes(30);
+    m.minute.reset();
+    m.minute.set(time_point.tm_min);
+
+    time_point.tm_hour -= nine_h.count();
+    time_point.tm_min += thirty_m.count();
+
+    offset = offset.zero();
+
+    TEST_TIME_POINT_BOUNDARIES(time_point);
+    TEST_ASSERT_EQUAL(0, offset.count());
+    TEST_ASSERT(expect::closest_delta(offset, m, time_point));
+    TEST_ASSERT_EQUAL((nine_h - thirty_m).count(), offset.count());
+
+    time_point = original_time_point;
+    offset = offset.zero();
+
+    m.hour.reset();
+    m.hour.set(time_point.tm_hour);
+
+    m.minute.reset();
+    m.minute.set(time_point.tm_min + thirty_m.count());
+
+    TEST_TIME_POINT_BOUNDARIES(time_point);
+    TEST_ASSERT_EQUAL(0, offset.count());
+    TEST_ASSERT(expect::closest_delta(offset, m, time_point));
+    TEST_ASSERT_EQUAL(thirty_m.count(), offset.count());
 }
 
 void test_schedule_invalid_parsing() {
@@ -755,6 +854,30 @@ void test_schedule_parsing_weekdays_range() {
     TEST_SCHEDULE_MATCH(time_point, "Mon,Thu..Sat 10,15,20:30");
 }
 
+void test_bitmask() {
+    constexpr auto Days = uint32_t{ 0b101010111100100010100110 } ;
+    constexpr auto Mask = std::bitset<24>(Days);
+
+    TEST_ASSERT(Mask.test(1));
+    TEST_ASSERT(Mask.test(11));
+    TEST_ASSERT(Mask.test(14));
+    TEST_ASSERT(Mask.test(23));
+
+    const auto past = restore::mask_past_hours(Mask, 12);
+    TEST_ASSERT_EQUAL(0b000000000000100010100110, past.to_ulong());
+    TEST_ASSERT_EQUAL(2, bits::first_set_u32(past.to_ulong()));
+    TEST_ASSERT_EQUAL(12, bits::last_set_u32(past.to_ulong()));
+    TEST_ASSERT_FALSE(past.test(14));
+    TEST_ASSERT_FALSE(past.test(23));
+
+    const auto future = expect::mask_future_hours(Mask, 12);
+    TEST_ASSERT_EQUAL(0b101010111100000000000000, future.to_ulong());
+    TEST_ASSERT_EQUAL(15, bits::first_set_u32(future.to_ulong()));
+    TEST_ASSERT_EQUAL(24, bits::last_set_u32(future.to_ulong()));
+    TEST_ASSERT_FALSE(future.test(1));
+    TEST_ASSERT_FALSE(future.test(11));
+}
+
 } // namespace test
 
 } // namespace
@@ -785,6 +908,7 @@ int main(int, char**) {
     RUN_TEST(test_restore_today);
     RUN_TEST(test_restore_delta_future);
     RUN_TEST(test_restore_delta_past);
+    RUN_TEST(test_expect_today);
     RUN_TEST(test_schedule_invalid_parsing);
     RUN_TEST(test_schedule_parsing_date);
     RUN_TEST(test_schedule_parsing_date_range);
@@ -793,5 +917,6 @@ int main(int, char**) {
     RUN_TEST(test_schedule_parsing_time_range);
     RUN_TEST(test_schedule_parsing_weekdays);
     RUN_TEST(test_schedule_parsing_weekdays_range);
+    RUN_TEST(test_bitmask);
     return UNITY_END();
 }

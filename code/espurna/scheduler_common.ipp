@@ -302,14 +302,24 @@ private:
     Mask _mask{};
 };
 
-// check whether first Nth bit is set. handles value == 0 by returning 0
-
+// Returns one plus the index of the least significant 1-bit of x, or if x is zero, returns zero.
 constexpr int first_set_u32(uint32_t value) {
     return __builtin_ffs(value);
 }
 
+// Returns one plus the index of the least significant 1-bit of x, or if x is zero, returns zero.
 constexpr int first_set_u64(uint64_t value) {
     return __builtin_ffsll(value);
+}
+
+// Returns the number of leading 0-bits in x, starting at the most significant bit position. If x is 0, the result is undefined.
+constexpr int last_set_u32(uint32_t value) {
+    return value ? (32 - __builtin_clz(value)) : 0;
+}
+
+// Returns the number of leading 0-bits in x, starting at the most significant bit position. If x is 0, the result is undefined.
+constexpr int last_set_u64(uint64_t value) {
+    return value ? (64 - __builtin_clzll(value)) : 0;
 }
 
 } // namespace bits
@@ -343,6 +353,14 @@ const tm& select_time(const datetime::Context& ctx, const Schedule& schedule) {
     return want_utc(schedule.time)
         ? ctx.utc
         : ctx.local;
+}
+
+datetime::Minutes to_minutes(int hour, int minute) {
+    return datetime::Hours{ hour } + datetime::Minutes{ minute };
+}
+
+datetime::Minutes to_minutes(const tm& t) {
+    return to_minutes(t.tm_hour, t.tm_min);
 }
 
 namespace restore {
@@ -418,38 +436,31 @@ std::bitset<60> mask_past_minutes(const std::bitset<60>& lhs, int rhs) {
 TimeMatch mask_past(const TimeMatch& lhs, const tm& rhs) {
     TimeMatch out;
     out.hour = mask_past_hours(lhs.hour, rhs.tm_hour);
-    out.minute = mask_past_minutes(lhs.minute, rhs.tm_hour);
+    out.minute = mask_past_minutes(lhs.minute, rhs.tm_min);
     out.flags = lhs.flags;
 
     return out;
 }
 
-datetime::Minutes to_minutes(int hour, int minute) {
-    return datetime::Hours{ hour } + datetime::Minutes{ minute };
-}
-
-datetime::Minutes to_minutes(const tm& t) {
-    return to_minutes(t.tm_hour, t.tm_min);
-}
-
 bool closest_delta(datetime::Minutes& out, const TimeMatch& lhs, const tm& rhs) {
     auto past = mask_past(lhs, rhs);
     if (lhs.hour[rhs.tm_hour]) {
-        auto minute = bits::first_set_u64(past.minute.to_ullong());
-        if (minute == 0) {
-            return false;
+        auto minute = bits::last_set_u64(past.minute.to_ullong());
+        if (minute != 0) {
+            --minute;
+            out = datetime::Minutes{ minute - rhs.tm_min };
+            return true;
         }
 
-        out = datetime::Minutes{ rhs.tm_min - minute };
-        return true;
+        past.hour[rhs.tm_hour] = false;
     }
 
-    auto hour = bits::first_set_u32(past.hour.to_ulong());
+    auto hour = bits::last_set_u32(past.hour.to_ulong());
     if (hour == 0) {
         return false;
     }
 
-    auto minute = bits::first_set_u64(lhs.minute.to_ullong());
+    auto minute = bits::last_set_u64(lhs.minute.to_ullong());
     if (minute == 0) {
         return false;
     }
@@ -523,6 +534,58 @@ bool handle_delta(Context& ctx, const Pending& pending) {
 }
 
 } // namespace restore
+
+namespace expect {
+
+std::bitset<24> mask_future_hours(const std::bitset<24>& lhs, int rhs) {
+    return lhs.to_ulong() & bits::fill_u32(rhs, 24);
+}
+
+std::bitset<60> mask_future_minutes(const std::bitset<60>& lhs, int rhs) {
+    return lhs.to_ullong() & bits::fill_u64(rhs, 60);
+}
+
+TimeMatch mask_future(const TimeMatch& lhs, const tm& rhs) {
+    TimeMatch out;
+    out.hour = mask_future_hours(lhs.hour, rhs.tm_hour);
+    out.minute = mask_future_minutes(lhs.minute, rhs.tm_min);
+    out.flags = lhs.flags;
+
+    return out;
+}
+
+bool closest_delta(datetime::Minutes& out, const TimeMatch& lhs, const tm& rhs) {
+    auto future = mask_future(lhs, rhs);
+    if (lhs.hour[rhs.tm_hour]) {
+        auto minute = bits::first_set_u64(future.minute.to_ullong());
+        if (minute != 0) {
+            --minute;
+            out = datetime::Minutes{ minute - rhs.tm_min };
+            return true;
+        }
+
+        future.hour[rhs.tm_hour] = false;
+    }
+
+    auto hour = bits::first_set_u32(future.hour.to_ulong());
+    if (hour == 0) {
+        return false;
+    }
+
+    auto minute = bits::first_set_u64(lhs.minute.to_ullong());
+    if (minute == 0) {
+        return false;
+    }
+
+    --hour;
+    --minute;
+
+    out += to_minutes(hour, minute) - to_minutes(rhs);
+
+    return true;
+}
+
+} // namespace expect
 
 } // namespace
 } // namespace scheduler
