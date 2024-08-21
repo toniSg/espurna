@@ -412,12 +412,12 @@ PROGMEM_STRING(Mode, "relayPulse");
 
 namespace {
 
-using DurationPair = espurna::settings::internal::duration_convert::Pair;
-using ParseResult = espurna::settings::internal::duration_convert::Result;
+using DurationPair = espurna::duration::Pair;
+using ParseResult = espurna::duration::PairResult;
 
 Duration native_duration(DurationPair pair) {
-    using namespace espurna::settings::internal;
-    return duration_convert::to_chrono_duration<Duration>(pair);
+    using namespace espurna::duration;
+    return to_chrono<Duration>(pair);
 }
 
 Duration native_duration(ParseResult result) {
@@ -427,8 +427,8 @@ Duration native_duration(ParseResult result) {
 }
 
 ParseResult parse_time(StringView view) {
-    using namespace espurna::settings::internal;
-    return duration_convert::parse(view, Seconds::period{});
+    using namespace espurna::duration;
+    return parse(view, Seconds::period{});
 }
 
 Duration native_duration(StringView view) {
@@ -1730,7 +1730,7 @@ void _relayProcessPulse(const Relay& relay, size_t id, bool status) {
 // duration equal to 0 would cancel existing timer
 // duration greater than 0 would toggle relay and schedule a timer
 [[gnu::unused]]
-void _relayHandlePulseResult(size_t id, espurna::settings::internal::duration_convert::Result result) {
+void _relayHandlePulseResult(size_t id, espurna::duration::PairResult result) {
     using namespace espurna::relay;
 
     const auto native = pulse::settings::native_duration(result);
