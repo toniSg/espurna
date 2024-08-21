@@ -209,6 +209,10 @@ time_t delta_utc(tm&, Seconds, Days);
 // apply both local and utc operations on the given context
 Context delta(const Context&, Days);
 
+// retrieve timezone offset from the given context
+// (impl. detail - *current* timezone offset, system wide)
+Seconds tz_offset(const Context&);
+
 // generic string format used for datetime output, without timezone
 String format(const tm&);
 

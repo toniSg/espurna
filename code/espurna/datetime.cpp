@@ -36,12 +36,6 @@ time_t delta_utc_impl(tm& out, Seconds seconds, Days days) {
     return tmp;
 }
 
-// In case of newlib, there is no `tm::tm_gmtoff` and this offset has to be calculated manually.
-// Although there is sort-of standard POSIX `_timezone` global, it only tracks non-DST time.
-Seconds tz_offset(const Context& ctx) {
-    return to_seconds(ctx.local) - to_seconds(ctx.utc);
-}
-
 String tz_offset_string(Seconds offset) {
     String out;
 
@@ -67,6 +61,12 @@ String tz_offset_string(Seconds offset) {
 }
 
 } // namespace
+
+// In case of newlib, there is no `tm::tm_gmtoff` and this offset has to be calculated manually.
+// Although there is sort-of standard POSIX `_timezone` global, it only tracks non-DST time.
+Seconds tz_offset(const Context& ctx) {
+    return to_seconds(ctx.local) - to_seconds(ctx.utc);
+}
 
 // Days since 1970/01/01.
 // Proposition 6.2 of Neri and Schneider,
