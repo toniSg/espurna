@@ -661,7 +661,7 @@ bool update_schedule(Schedule& schedule) {
     // if not sun{rise,set} schedule, keep it as-is
     const auto* selected = sun::find_event_match(schedule);
     if (nullptr == selected) {
-        return false;
+        return true;
     }
 
     // in case calculation failed, no use here
