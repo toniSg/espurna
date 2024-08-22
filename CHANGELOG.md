@@ -3,9 +3,37 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## Pending changes
+## [1.18.0] ???
 
-???
+### Added
+- Scheduler relative time spec [8edb7b63](https://github.com/xoseperez/espurna/commit/8edb7b633369cd04151525066ab0f8b512da7702)
+
+### Fixed
+- Calculate offset time using local timezone instead of directly comparing wall clock when restoring scheduled actions [f82cd221](https://github.com/xoseperez/espurna/commit/f82cd2211e841a0093ab29ccaebf363397c669e4)
+- Schedule incorrectly discarded when sunrise or sunset flag was not set [24ebcb84](https://github.com/xoseperez/espurna/commit/24ebcb843054bd328b040e6302d2fd63322fd6c2)
+
+## [1.17.0] (dev)
+
+### Added
+- ISO 8601 datetimes in MQTT (e.g. `2024-08-23T08:43:51+12:00`), WebUI and debug logs [a1363dda](https://github.com/xoseperez/espurna/commit/a1363ddad909b88e4c05e894f0a20756f36463ae)
+- More strict WebUI input validation [#2612](https://github.com/xoseperez/espurna/issues/2612)
+- Side-by-side expected and current values when configuring RATIO [af3f8384](https://github.com/xoseperez/espurna/commit/af3f83841fafeac164d7018dd190dec3c6d648e8)
+- MIN and MAX sensor filters [2cdc456a](https://github.com/xoseperez/espurna/commit/2cdc456a36ad6c68b587186bfd9ff7be2266bb73)
+- UPPER and LOWER threshold values for sensors [fc8ef5a2](https://github.com/xoseperez/espurna/commit/fc8ef5a298d01c78ce7d5acfcab9d591b09026d5)
+- NTP DHCP and update interval settings in WebUI [1ca0dcc7](https://github.com/xoseperez/espurna/commit/1ca0dcc76b4bd2bf84085918e7f9b9808cb2e453)
+
+### Fixed
+- Sensor reading counters are reset when settings reload [b11071cb](https://github.com/xoseperez/espurna/commit/b11071cb9e13a98df1058aa54d8e0822fc706360)
+- DHT sensor failing to re-enable interrupts [#2609](https://github.com/xoseperez/espurna/issues/2609)
+- Visual bug w/ password reveal button when using narrow screen [4c005fa9](https://github.com/xoseperez/espurna/commit/4c005fa9a53af08043821975b350ab8a8c899e38)
+
+### Changed
+- Median filter uses REPORT counter as window, not a fixed size of 3. Values are reported as-is until internal buffers are filled, median value is reported afterwards [#2543](https://github.com/xoseperez/espurna/issues/2543)
+- Sensor WebUI waits until every configured sensor performs initial setup [2c8470c1](https://github.com/xoseperez/espurna/commit/2c8470c11ccfde80fedef24db53accac1fc65813)
+- Reworked WebUI builder, initial commit and general description at [289fea4f](https://github.com/xoseperez/espurna/commit/289fea4f3d2b5a253e981640ed2560e6453ac8ef)
+- Functional and unit tests for WebUI [#1899](https://github.com/xoseperez/espurna/issues/1899)
+- Optional password checks in WebUI [4fda8408](https://github.com/xoseperez/espurna/commit/4fda84082a6dfd1f0189569cbca51b19ba1e16af)
+- Various WebUI labels and messages clean-up
 
 ## [1.16.0-dev] Snapshot build 2024-06-15
 
