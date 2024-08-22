@@ -100,6 +100,8 @@ void test_date_impl() {
 
 void test_date_parsing_invalid() {
     TEST_SCHEDULER_INVALID_DATE("");
+    TEST_SCHEDULER_INVALID_DATE("0");
+    TEST_SCHEDULER_INVALID_DATE("2");
     TEST_SCHEDULER_INVALID_DATE("foo bar");
     TEST_SCHEDULER_INVALID_DATE("2049-");
     TEST_SCHEDULER_INVALID_DATE("-");
@@ -427,7 +429,7 @@ void test_restore_today() {
     schedule.date.month[0] = true;
     schedule.date.year = 2006;
 
-    TEST_ASSERT_FALSE(restore::handle_today(ctx, 0, schedule));
+    TEST_ASSERT_FALSE(handle_today(ctx, 0, schedule));
     TEST_ASSERT_EQUAL(1, ctx.pending.size());
     TEST_ASSERT_EQUAL(0, ctx.results.size());
 
@@ -436,7 +438,7 @@ void test_restore_today() {
 
     schedule.date = original_date;
 
-    TEST_ASSERT_TRUE(restore::handle_today(ctx, 1, schedule));
+    TEST_ASSERT_TRUE(handle_today(ctx, 1, schedule));
     TEST_ASSERT_EQUAL(0, ctx.pending.size());
     TEST_ASSERT_EQUAL(1, ctx.results.size());
     TEST_ASSERT_EQUAL(1, ctx.results[0].index);
@@ -453,7 +455,7 @@ void test_restore_today() {
     schedule.time.minute.reset();
     schedule.time.minute.set(ctx.current.utc.tm_min - 4);
 
-    TEST_ASSERT_TRUE(restore::handle_today(ctx, 2, schedule));
+    TEST_ASSERT_TRUE(handle_today(ctx, 2, schedule));
     TEST_ASSERT_EQUAL(0, ctx.pending.size());
     TEST_ASSERT_EQUAL(1, ctx.results.size());
     TEST_ASSERT_EQUAL(2, ctx.results[0].index);
@@ -470,7 +472,7 @@ void test_restore_today() {
     schedule.time.minute.reset();
     schedule.time.minute.set(ctx.current.utc.tm_min + 30);
 
-    TEST_ASSERT_TRUE(restore::handle_today(ctx, 3, schedule));
+    TEST_ASSERT_TRUE(handle_today(ctx, 3, schedule));
     TEST_ASSERT_EQUAL(0, ctx.pending.size());
     TEST_ASSERT_EQUAL(1, ctx.results.size());
     TEST_ASSERT_EQUAL(3, ctx.results[0].index);
@@ -482,22 +484,22 @@ void test_restore_today() {
 void test_restore_delta_future() {
     MAKE_RESTORE_CONTEXT(ctx, schedule);
 
-    const auto pending = restore::Pending{.index = 1, .schedule = schedule};
+    const auto pending = Pending{.index = 1, .schedule = schedule};
 
     ctx.next_delta(datetime::Days{ 25 });
-    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_FALSE(handle_pending(ctx, pending));
     TEST_ASSERT_EQUAL(0, ctx.results.size());
 
     ctx.next_delta(datetime::Days{ -15 });
-    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_FALSE(handle_pending(ctx, pending));
     TEST_ASSERT_EQUAL(0, ctx.results.size());
 
     ctx.next_delta(datetime::Days{ 0 });
-    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_FALSE(handle_pending(ctx, pending));
     TEST_ASSERT_EQUAL(0, ctx.results.size());
 
     ctx.next();
-    TEST_ASSERT_FALSE(handle_delta(ctx, pending));
+    TEST_ASSERT_FALSE(handle_pending(ctx, pending));
     TEST_ASSERT_EQUAL(0, ctx.results.size());
 }
 
@@ -512,63 +514,160 @@ void test_restore_delta_past() {
 
     constexpr std::array tests{
         Expected{
-            .index = 123,
+            .index = 0,
             .delta = datetime::Days{ -1 },
             .day = 1,
             .weekday = datetime::Sunday,
             .hours = datetime::Hours{ -31 }},
         Expected{
-            .index = 567,
+            .index = 1,
             .delta = datetime::Days{ -1 },
             .day = 31,
             .weekday = datetime::Saturday,
             .hours = datetime::Hours{ -55 }},
         Expected{
-            .index = 890,
+            .index = 2,
             .delta = datetime::Days{ -1 },
             .day = 30,
             .weekday = datetime::Friday,
             .hours = datetime::Hours{ -79 }},
         Expected{
-            .index = 111,
+            .index = 3,
             .delta = datetime::Days{ -2 },
             .day = 28,
             .weekday = datetime::Wednesday,
             .hours = datetime::Hours{ -127 }},
     };
 
+
     MAKE_RESTORE_CONTEXT(ctx, schedule);
 
-    for (const auto& test : tests) {
-        schedule.date = scheduler::DateMatch{};
-        schedule.date.day[test.day] = true;
+    auto schedule_day_weekday = [&](auto& out, const auto& test) {
+        out.date = scheduler::DateMatch{};
+        out.date.day[test.day] = true;
 
-        schedule.weekdays = scheduler::WeekdayMatch{};
-        schedule.weekdays.day[test.weekday.c_value()] = true;
+        out.weekdays = scheduler::WeekdayMatch{};
+        out.weekdays.day[test.weekday.c_value()] = true;
+    };
+
+    for (const auto& test : tests) {
+        schedule_day_weekday(schedule, test);
+
+        TEST_ASSERT_FALSE(
+            handle_today(ctx, test.index, schedule));
+    }
+
+    TEST_ASSERT_EQUAL(0, ctx.results.size());
+    TEST_ASSERT_EQUAL(tests.size(), ctx.pending.size());
+
+    for (const auto& test : tests) {
+        schedule_day_weekday(schedule, test);
 
         ctx.next_delta(test.delta);
 
-        TEST_ASSERT_EQUAL(0, ctx.results.size());
-        TEST_ASSERT_EQUAL(0, ctx.pending.size());
-
-        TEST_ASSERT_FALSE(
-            restore::handle_today(ctx, test.index, schedule));
-        TEST_ASSERT_EQUAL(0, ctx.results.size());
-        TEST_ASSERT_EQUAL(1, ctx.pending.size());
-
-        TEST_ASSERT_TRUE(
-            restore::handle_delta(ctx, ctx.pending[0]));
-        TEST_ASSERT_EQUAL(1, ctx.results.size());
-        TEST_ASSERT_EQUAL(1, ctx.pending.size());
-
-        TEST_ASSERT_EQUAL(test.index, ctx.results[0].index);
-        TEST_ASSERT_EQUAL(
-            datetime::Minutes(test.hours).count(),
-            ctx.results[0].offset.count());
-
-        ctx.results.clear();
-        ctx.pending.clear();
+        for (auto& pending : ctx.pending) {
+            handle_pending(ctx, pending);
+        }
     }
+
+    TEST_ASSERT_EQUAL(tests.size(), ctx.results.size());
+    TEST_ASSERT_EQUAL(tests.size(), ctx.pending.size());
+
+    for (auto& result : ctx.results) {
+        TEST_ASSERT_EQUAL(tests[result.index].index, result.index);
+        TEST_ASSERT_EQUAL(
+            datetime::Minutes(tests[result.index].hours).count(),
+            result.offset.count());
+    }
+}
+
+void test_event_impl() {
+    static_assert(std::is_same_v<datetime::Clock::duration, datetime::Seconds>, "");
+    const auto now = datetime::Clock::now();
+
+    static_assert(std::is_same_v<decltype(event::TimePoint::minutes), datetime::Minutes>, "");
+    static_assert(std::is_same_v<decltype(event::TimePoint::seconds), datetime::Seconds>, "");
+    event::TimePoint foo = event::make_time_point(now.time_since_epoch());
+
+    TEST_ASSERT(event::is_valid(foo));
+    TEST_ASSERT_GREATER_OR_EQUAL(0, foo.minutes.count());
+    TEST_ASSERT_GREATER_OR_EQUAL(0, foo.seconds.count());
+
+    const auto minutes =
+        std::chrono::duration_cast<datetime::Minutes>(now.time_since_epoch());
+    static_assert(std::is_same_v<decltype(minutes), const datetime::Minutes>, "");
+
+    const auto seconds =
+        now.time_since_epoch() - minutes;
+    static_assert(std::is_same_v<decltype(seconds), const datetime::Seconds>, "");
+
+    TEST_ASSERT_EQUAL(minutes.count(), foo.minutes.count());
+    TEST_ASSERT_EQUAL(seconds.count(), foo.seconds.count());
+}
+
+void test_event_parsing() {
+    auto result = parse_relative("5 after \"foobar\"");
+    TEST_ASSERT_EQUAL(relative::Order::After, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Named, result.type);
+    TEST_ASSERT_EQUAL_STRING("foobar", result.name.c_str());
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(5).count(),
+        result.offset.count());
+
+    result = parse_relative("33m before \"bar\"");
+    TEST_ASSERT_EQUAL(relative::Order::Before, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Named, result.type);
+    TEST_ASSERT_EQUAL_STRING("bar", result.name.c_str());
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(33).count(),
+        result.offset.count());
+
+    result = parse_relative("30m before sunrise");
+    TEST_ASSERT_EQUAL(relative::Order::Before, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Sunrise, result.type);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(30).count(),
+        result.offset.count());
+
+    result = parse_relative("1h15m after sunset");
+    TEST_ASSERT_EQUAL(relative::Order::After, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Sunset, result.type);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(75).count(),
+        result.offset.count());
+
+    result = parse_relative("after sunset");
+    TEST_ASSERT_EQUAL(relative::Order::After, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Sunset, result.type);
+    TEST_ASSERT_EQUAL(1, result.offset.count());
+
+    result = parse_relative("before sunrise");
+    TEST_ASSERT_EQUAL(relative::Order::Before, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Sunrise, result.type);
+    TEST_ASSERT_EQUAL(1, result.offset.count());
+
+    result = parse_relative("10m before calendar#123");
+    TEST_ASSERT_EQUAL(relative::Order::Before, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Calendar, result.type);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes(10).count(),
+        result.offset.count());
+    TEST_ASSERT_EQUAL(123, result.data);
+
+    result = parse_relative("after calendar#543");
+    TEST_ASSERT_EQUAL(relative::Type::None, result.type);
+
+    result = parse_relative("after");
+    TEST_ASSERT_EQUAL(relative::Type::None, result.type);
+
+    result = parse_relative("before");
+    TEST_ASSERT_EQUAL(relative::Type::None, result.type);
+
+    result = parse_relative("11 befre boot");
+    TEST_ASSERT_EQUAL(relative::Type::None, result.type);
+
+    result = parse_relative("55 afer sunrise");
+    TEST_ASSERT_EQUAL(relative::Type::None, result.type);
 }
 
 #define TEST_TIME_POINT_BOUNDARIES(X)\
@@ -582,13 +681,12 @@ void test_expect_today() {
     scheduler::TimeMatch m;
     m.hour.set(time_point.tm_hour - 1);
     m.minute.set(time_point.tm_min - 1);
+    m.flags = scheduler::FlagUtc;
 
-    datetime::Minutes offset{};
-    TEST_ASSERT_EQUAL(0, offset.count());
+    tm closest = time_point;
 
     TEST_TIME_POINT_BOUNDARIES(time_point);
-    TEST_ASSERT_FALSE(expect::closest_delta(offset, m, time_point));
-    TEST_ASSERT_EQUAL(0, offset.count());
+    TEST_ASSERT_FALSE(search::closest_future(closest, m, time_point));
 
     constexpr auto one_h = datetime::Hours(1);
     m.hour.reset();
@@ -598,9 +696,11 @@ void test_expect_today() {
     m.minute.reset();
     m.minute.set(time_point.tm_min + twenty_six_m.count());
 
-    TEST_ASSERT_EQUAL(0, offset.count());
-    TEST_ASSERT(expect::closest_delta(offset, m, time_point));
-    TEST_ASSERT_EQUAL((one_h + twenty_six_m).count(), offset.count());
+    closest = time_point;
+
+    TEST_ASSERT(search::closest_future(closest, m, time_point));
+    TEST_ASSERT_EQUAL(time_point.tm_hour + one_h.count(), closest.tm_hour);
+    TEST_ASSERT_EQUAL(time_point.tm_min + twenty_six_m.count(), closest.tm_min);
 
     constexpr auto nine_h = datetime::Hours(9);
     m.hour.reset();
@@ -612,16 +712,16 @@ void test_expect_today() {
 
     time_point.tm_hour -= nine_h.count();
     time_point.tm_min += thirty_m.count();
-
-    offset = offset.zero();
-
     TEST_TIME_POINT_BOUNDARIES(time_point);
-    TEST_ASSERT_EQUAL(0, offset.count());
-    TEST_ASSERT(expect::closest_delta(offset, m, time_point));
-    TEST_ASSERT_EQUAL((nine_h - thirty_m).count(), offset.count());
+
+    closest = time_point;
+
+    TEST_ASSERT(search::closest_future(closest, m, time_point));
+    TEST_ASSERT_EQUAL(time_point.tm_hour + nine_h.count(), closest.tm_hour);
+    TEST_ASSERT_EQUAL(time_point.tm_min - thirty_m.count(), closest.tm_min);
 
     time_point = original_time_point;
-    offset = offset.zero();
+    closest = time_point;
 
     m.hour.reset();
     m.hour.set(time_point.tm_hour);
@@ -630,9 +730,43 @@ void test_expect_today() {
     m.minute.set(time_point.tm_min + thirty_m.count());
 
     TEST_TIME_POINT_BOUNDARIES(time_point);
-    TEST_ASSERT_EQUAL(0, offset.count());
-    TEST_ASSERT(expect::closest_delta(offset, m, time_point));
-    TEST_ASSERT_EQUAL(thirty_m.count(), offset.count());
+
+    TEST_ASSERT(search::closest_future(closest, m, time_point));
+    TEST_ASSERT_EQUAL(time_point.tm_hour, closest.tm_hour);
+    TEST_ASSERT_EQUAL(time_point.tm_min + thirty_m.count(), closest.tm_min);
+}
+
+void test_expect_delta_future() {
+    const auto reference = datetime::make_context(ReferenceTimestamp);
+
+    auto ctx = expect::Context{ reference };
+
+    Schedule schedule;
+    schedule.time.flags = scheduler::FlagUtc;
+    schedule.ok = true;
+
+    constexpr auto one_d = datetime::Days(1);
+    schedule.date.day[reference.utc.tm_mday + one_d.count()] = true;
+
+    constexpr auto thirty_one_m = datetime::Minutes(31);
+    schedule.time.hour[reference.utc.tm_hour] = true;
+    schedule.time.minute[reference.utc.tm_min + thirty_one_m.count()] = true;
+    schedule.time.flags = FlagUtc;
+
+    TEST_ASSERT_FALSE(handle_today(ctx, 123, schedule));
+    TEST_ASSERT_EQUAL(0, ctx.results.size());
+    TEST_ASSERT_EQUAL(1, ctx.pending.size());
+    TEST_ASSERT_EQUAL(123, ctx.pending[0].index);
+
+    TEST_ASSERT(ctx.next());
+
+    TEST_ASSERT(handle_pending(ctx, ctx.pending[0]));
+    TEST_ASSERT_EQUAL(1, ctx.results.size());
+    TEST_ASSERT_EQUAL(123, ctx.results[0].index);
+
+    TEST_ASSERT_EQUAL(
+        (one_d + thirty_one_m).count(),
+        ctx.results[0].offset.count());
 }
 
 void test_schedule_invalid_parsing() {
@@ -702,6 +836,7 @@ void test_schedule_parsing_time() {
     TEST_SCHEDULE_MATCH(time_point, "2024-01-01");
     TEST_SCHEDULE_MATCH(time_point, "01-01");
     TEST_SCHEDULE_MATCH(time_point, "Monday");
+    TEST_SCHEDULE_MATCH(time_point, "1");
     TEST_SCHEDULE_MATCH(time_point, "00:00");
     TEST_SCHEDULE_MATCH(time_point, "UTC");
 }
@@ -854,7 +989,7 @@ void test_schedule_parsing_weekdays_range() {
     TEST_SCHEDULE_MATCH(time_point, "Mon,Thu..Sat 10,15,20:30");
 }
 
-void test_bitmask() {
+void test_search_bits() {
     constexpr auto Days = uint32_t{ 0b101010111100100010100110 } ;
     constexpr auto Mask = std::bitset<24>(Days);
 
@@ -863,19 +998,73 @@ void test_bitmask() {
     TEST_ASSERT(Mask.test(14));
     TEST_ASSERT(Mask.test(23));
 
-    const auto past = restore::mask_past_hours(Mask, 12);
+    const auto past = search::mask_past_hours(Mask, 12);
     TEST_ASSERT_EQUAL(0b000000000000100010100110, past.to_ulong());
     TEST_ASSERT_EQUAL(2, bits::first_set_u32(past.to_ulong()));
     TEST_ASSERT_EQUAL(12, bits::last_set_u32(past.to_ulong()));
     TEST_ASSERT_FALSE(past.test(14));
     TEST_ASSERT_FALSE(past.test(23));
 
-    const auto future = expect::mask_future_hours(Mask, 12);
+    const auto future = search::mask_future_hours(Mask, 12);
     TEST_ASSERT_EQUAL(0b101010111100000000000000, future.to_ulong());
     TEST_ASSERT_EQUAL(15, bits::first_set_u32(future.to_ulong()));
     TEST_ASSERT_EQUAL(24, bits::last_set_u32(future.to_ulong()));
     TEST_ASSERT_FALSE(future.test(1));
     TEST_ASSERT_FALSE(future.test(11));
+}
+
+void test_datetime_parsing() {
+    datetime::DateHhMmSs parsed{};
+    bool utc { false };
+
+    TEST_ASSERT(parse_simple_iso8601(parsed, utc, "2006-01-02T22:04:05+00:00"));
+    TEST_ASSERT(utc);
+    TEST_ASSERT_EQUAL(
+        ReferenceTimestamp,
+        datetime::to_seconds(parsed, utc).count());
+
+    parsed = datetime::DateHhMmSs{};
+    utc = false;
+
+    TEST_ASSERT(parse_simple_iso8601(parsed, utc, "2006-01-02T22:04:05Z"));
+    TEST_ASSERT(utc);
+    TEST_ASSERT_EQUAL(
+        ReferenceTimestamp,
+        datetime::to_seconds(parsed, utc).count());
+
+    parsed = datetime::DateHhMmSs{};
+    utc = false;
+
+    const auto now = datetime::Clock::now();
+
+    time_t ts;
+    ts = now.time_since_epoch().count();
+
+    tm local{};
+    localtime_r(&ts, &local);
+
+    char buf[64]{};
+    const auto len = strftime(&buf[0], sizeof(buf), "%FT%H:%M:%S", &local);
+
+    TEST_ASSERT_NOT_EQUAL(0, len);
+    const auto view = StringView{&buf[0], &buf[0] + len};
+
+    TEST_ASSERT(parse_simple_iso8601(parsed, utc, view));
+    TEST_ASSERT_FALSE(utc);
+
+    const auto seconds = datetime::to_seconds(parsed, utc);
+    TEST_ASSERT_EQUAL(
+        now.time_since_epoch().count(), seconds.count());
+
+    tm c_parsed = parsed.c_value();
+    localtime_r(&ts, &c_parsed);
+
+    TEST_ASSERT_EQUAL(local.tm_year, c_parsed.tm_year);
+    TEST_ASSERT_EQUAL(local.tm_mon, c_parsed.tm_mon);
+    TEST_ASSERT_EQUAL(local.tm_mday, c_parsed.tm_mday);
+    TEST_ASSERT_EQUAL(local.tm_hour, c_parsed.tm_hour);
+    TEST_ASSERT_EQUAL(local.tm_min, c_parsed.tm_min);
+    TEST_ASSERT_EQUAL(local.tm_sec, c_parsed.tm_sec);
 }
 
 } // namespace test
@@ -908,7 +1097,10 @@ int main(int, char**) {
     RUN_TEST(test_restore_today);
     RUN_TEST(test_restore_delta_future);
     RUN_TEST(test_restore_delta_past);
+    RUN_TEST(test_event_impl);
+    RUN_TEST(test_event_parsing);
     RUN_TEST(test_expect_today);
+    RUN_TEST(test_expect_delta_future);
     RUN_TEST(test_schedule_invalid_parsing);
     RUN_TEST(test_schedule_parsing_date);
     RUN_TEST(test_schedule_parsing_date_range);
@@ -917,6 +1109,7 @@ int main(int, char**) {
     RUN_TEST(test_schedule_parsing_time_range);
     RUN_TEST(test_schedule_parsing_weekdays);
     RUN_TEST(test_schedule_parsing_weekdays_range);
-    RUN_TEST(test_bitmask);
+    RUN_TEST(test_search_bits);
+    RUN_TEST(test_datetime_parsing);
     return UNITY_END();
 }

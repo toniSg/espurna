@@ -312,12 +312,12 @@ constexpr int first_set_u64(uint64_t value) {
     return __builtin_ffsll(value);
 }
 
-// Returns the number of leading 0-bits in x, starting at the most significant bit position. If x is 0, the result is undefined.
+// Returns one plus the index of the most significant 1-bit of x, or if x is zero, returns zero.
 constexpr int last_set_u32(uint32_t value) {
     return value ? (32 - __builtin_clz(value)) : 0;
 }
 
-// Returns the number of leading 0-bits in x, starting at the most significant bit position. If x is 0, the result is undefined.
+// Returns one plus the index of the most significant 1-bit of x, or if x is zero, returns zero.
 constexpr int last_set_u64(uint64_t value) {
     return value ? (64 - __builtin_clzll(value)) : 0;
 }
@@ -355,17 +355,15 @@ const tm& select_time(const datetime::Context& ctx, const Schedule& schedule) {
         : ctx.local;
 }
 
-datetime::Minutes to_minutes(int hour, int minute) {
-    return datetime::Hours{ hour } + datetime::Minutes{ minute };
+constexpr datetime::Minutes to_minutes(datetime::Seconds seconds) {
+    return std::chrono::duration_cast<datetime::Minutes>(seconds);
 }
 
-datetime::Minutes to_minutes(const tm& t) {
-    return to_minutes(t.tm_hour, t.tm_min);
+constexpr datetime::Minutes to_minutes(const datetime::Context& ctx) {
+    return to_minutes(datetime::Seconds(ctx.timestamp));
 }
 
-namespace restore {
-
-struct Result {
+struct Offset {
     size_t index;
     datetime::Minutes offset;
 };
@@ -375,12 +373,246 @@ struct Pending {
     Schedule schedule;
 };
 
-struct Context {
-    Context() = delete;
+namespace search {
 
+bool is_same_day(const tm& lhs, const tm& rhs) {
+    return lhs.tm_year == rhs.tm_year
+        && lhs.tm_mon == rhs.tm_mon
+        && lhs.tm_yday == rhs.tm_yday
+        && lhs.tm_wday == rhs.tm_wday
+        && lhs.tm_mday == rhs.tm_mday;
+}
+
+struct Closest {
+    using Mask = TimeMatch(*)(const TimeMatch&, const tm&);
+    Mask mask;
+
+    using FindU32 = int(*)(uint32_t);
+    FindU32 find_u32;
+
+    using FindU64 = int(*)(uint64_t);
+    FindU64 find_u64;
+};
+
+// generalized code to find out tm either in the past or the future matching lhs, starting from the rhs
+bool closest(const Closest& impl, tm& out, const TimeMatch& lhs, const tm& rhs) {
+    auto masked = impl.mask(lhs, rhs);
+    if (lhs.hour[rhs.tm_hour]) {
+        auto minute = impl.find_u64(masked.minute.to_ullong());
+        if (minute != 0) {
+            --minute;
+            out.tm_min = minute;
+            return true;
+        }
+
+        masked.hour[rhs.tm_hour] = false;
+    }
+
+    auto hour = impl.find_u32(masked.hour.to_ulong());
+    if (hour == 0) {
+        return false;
+    }
+
+    auto minute = impl.find_u64(lhs.minute.to_ullong());
+    if (minute == 0) {
+        return false;
+    }
+
+    --hour;
+    --minute;
+
+    out.tm_hour = hour;
+    out.tm_min = minute;
+
+    return true;
+}
+
+std::bitset<24> mask_past_hours(const std::bitset<24>& lhs, int rhs) {
+    return lhs.to_ulong() & bits::fill_u32(0, rhs);
+}
+
+std::bitset<60> mask_past_minutes(const std::bitset<60>& lhs, int rhs) {
+    return lhs.to_ullong() & bits::fill_u64(0, rhs);
+}
+
+TimeMatch mask_past(const TimeMatch& lhs, const tm& rhs) {
+    TimeMatch out;
+    out.hour = mask_past_hours(lhs.hour, rhs.tm_hour);
+    out.minute = mask_past_minutes(lhs.minute, rhs.tm_min);
+    out.flags = lhs.flags;
+
+    return out;
+}
+
+constexpr auto ClosestPast = Closest{
+    .mask = mask_past,
+    .find_u32 = bits::last_set_u32,
+    .find_u64 = bits::last_set_u64,
+};
+
+bool closest_past(tm& out, const TimeMatch& lhs, const tm& rhs) {
+    return closest(ClosestPast, out, lhs, rhs);
+}
+
+bool closest_end_of_day(tm& out, const TimeMatch& lhs, const tm& rhs) {
+    tm tmp;
+    std::memcpy(&tmp, &rhs, sizeof(tm));
+
+    tmp.tm_hour = 23;
+    tmp.tm_min = 59;
+    tmp.tm_sec = 00;
+
+    return closest_past(out, lhs, tmp);
+}
+
+std::bitset<24> mask_future_hours(const std::bitset<24>& lhs, int rhs) {
+    return lhs.to_ulong() & bits::fill_u32(rhs, 24);
+}
+
+std::bitset<60> mask_future_minutes(const std::bitset<60>& lhs, int rhs) {
+    return lhs.to_ullong() & bits::fill_u64(rhs, 60);
+}
+
+TimeMatch mask_future(const TimeMatch& lhs, const tm& rhs) {
+    TimeMatch out;
+    out.hour = mask_future_hours(lhs.hour, rhs.tm_hour);
+    out.minute = mask_future_minutes(lhs.minute, rhs.tm_min);
+    out.flags = lhs.flags;
+
+    return out;
+}
+
+constexpr auto Future = Closest{
+    .mask = mask_future,
+    .find_u32 = bits::first_set_u32,
+    .find_u64 = bits::first_set_u64,
+};
+
+bool closest_future(tm& out, const TimeMatch& lhs, const tm& rhs) {
+    return closest(Future, out, lhs, rhs);
+}
+
+bool is_utc(const datetime::Context& ctx, const tm& time_point) {
+    return &ctx.utc == &time_point;
+}
+
+bool is_local(const datetime::Context& ctx, const tm& time_point) {
+    return &ctx.local == &time_point;
+}
+
+struct Context {
     explicit Context(const datetime::Context& ctx) :
         base(ctx),
         current(ctx)
+    {}
+
+    const datetime::Context& base;
+
+    datetime::Context current{};
+    datetime::Days days{};
+
+    // most of the time, schedules are processed in bulk
+    // push 'not-yet-handled' ones to internal storage to be processed later
+    // caller is expected to have full access to both, internals should only use 'push'
+
+    std::vector<Pending> pending{};
+    std::vector<Offset> results{};
+
+    void push_pending(size_t index, const Schedule& schedule) {
+        pending.push_back({.index = index, .schedule = schedule});
+    }
+
+    void push_result(size_t index, datetime::Minutes offset) {
+        results.push_back({.index = index, .offset = offset});
+    }
+
+    void sort() {
+        std::sort(
+            results.begin(),
+            results.end(),
+            [](const Offset& lhs, const Offset& rhs) {
+                return lhs.offset < rhs.offset;
+            });
+    }
+};
+
+bool closest_offset_result(tm& out, Context& ctx, size_t index, const tm& time_point) {
+    datetime::Seconds end{ -1 };
+    if (is_utc(ctx.current, time_point)) {
+        end = datetime::to_seconds(out);
+    } else if (is_local(ctx.current, time_point)) {
+        end = datetime::Seconds{ mktime(&out) };
+    }
+
+    if (end > end.zero()) {
+        // cast Seconds -> Minutes right now, extra seconds from
+        // subtraction may cause unexpected result after rounding
+        const auto begin = datetime::Seconds{ ctx.base.timestamp };
+        const auto offset = to_minutes(end) - to_minutes(begin);
+
+        ctx.push_result(index, offset);
+
+        return true;
+    }
+
+    return false;
+}
+
+using Handler = bool(*)(tm&, const TimeMatch&, const tm&);
+
+bool handle_today(const Handler& handler, Context& ctx, size_t index, const Schedule& schedule) {
+    const auto& time_point = select_time(ctx.current, schedule);
+
+    // in case mktime is used, make sure dst <-> std does not happen and as
+    // it tries to adjust tm_hour and tm_min. both stay exactly as specified
+    tm tmp;
+    tmp = time_point;
+    tmp.tm_isdst = -1;
+
+    // handler() is expected to adjust `tmp` to either past or future,
+    // but staying within 00:00..23:59 boundaries of the `time_point`
+    if (match(schedule.date, time_point)
+        && match(schedule.weekdays, time_point)
+        && handler(tmp, schedule.time, time_point)
+        && is_same_day(tmp, time_point)
+        && match(schedule.time, tmp)
+        && closest_offset_result(tmp, ctx, index, time_point))
+    {
+        return true;
+    }
+
+    ctx.push_pending(index, schedule);
+
+    return false;
+}
+
+bool handle_pending(const Handler& handler, Context& ctx, const Pending& pending) {
+    if (!pending.schedule.ok) {
+        return false;
+    }
+
+    const auto& time_point =
+        select_time(ctx.current, pending.schedule);
+
+    tm tmp;
+    tmp = time_point;
+    tmp.tm_isdst = -1;
+
+    return match(pending.schedule.date, time_point)
+        && match(pending.schedule.weekdays, time_point)
+        && handler(tmp, pending.schedule.time, time_point)
+        && is_same_day(tmp, time_point)
+        && match(pending.schedule.time, tmp)
+        && closest_offset_result(tmp, ctx, pending.index, time_point);
+}
+
+} // namespace search
+
+namespace restore {
+
+struct Context : public search::Context {
+    explicit Context(const datetime::Context& ctx) :
+        search::Context(ctx)
     {
         init();
     }
@@ -392,15 +624,9 @@ struct Context {
     bool next_delta(const datetime::Days&);
     bool next();
 
-    const datetime::Context& base;
-
-    datetime::Context current{};
-    datetime::Days days{};
-
-    std::vector<Pending> pending{};
-    std::vector<Result> results{};
-
 private:
+    // defined externally, warnings should be safe to ignore
+
     void destroy();
     void init();
     void init_delta();
@@ -425,167 +651,149 @@ bool Context::next() {
     return next_delta(datetime::Days{ -1 });
 }
 
-std::bitset<24> mask_past_hours(const std::bitset<24>& lhs, int rhs) {
-    return lhs.to_ulong() & bits::fill_u32(0, rhs);
-}
-
-std::bitset<60> mask_past_minutes(const std::bitset<60>& lhs, int rhs) {
-    return lhs.to_ullong() & bits::fill_u64(0, rhs);
-}
-
-TimeMatch mask_past(const TimeMatch& lhs, const tm& rhs) {
-    TimeMatch out;
-    out.hour = mask_past_hours(lhs.hour, rhs.tm_hour);
-    out.minute = mask_past_minutes(lhs.minute, rhs.tm_min);
-    out.flags = lhs.flags;
-
-    return out;
-}
-
-bool closest_delta(datetime::Minutes& out, const TimeMatch& lhs, const tm& rhs) {
-    auto past = mask_past(lhs, rhs);
-    if (lhs.hour[rhs.tm_hour]) {
-        auto minute = bits::last_set_u64(past.minute.to_ullong());
-        if (minute != 0) {
-            --minute;
-            out = datetime::Minutes{ minute - rhs.tm_min };
-            return true;
-        }
-
-        past.hour[rhs.tm_hour] = false;
-    }
-
-    auto hour = bits::last_set_u32(past.hour.to_ulong());
-    if (hour == 0) {
-        return false;
-    }
-
-    auto minute = bits::last_set_u64(lhs.minute.to_ullong());
-    if (minute == 0) {
-        return false;
-    }
-
-    --hour;
-    --minute;
-
-    out -= to_minutes(rhs) - to_minutes(hour, minute);
-
-    return true;
-}
-
-bool closest_delta_end_of_day(datetime::Minutes& out, const TimeMatch& lhs, const tm& rhs) {
-    tm tmp;
-    std::memcpy(&tmp, &rhs, sizeof(tm));
-
-    tmp.tm_hour = 23;
-    tmp.tm_min = 59;
-    tmp.tm_sec = 00;
-
-    const auto result = closest_delta(out, lhs, tmp);
-    if (result) {
-        out -= datetime::Minutes{ 1 };
-        return true;
-    }
-
-    return false;
-}
-
-void context_pending(Context& ctx, size_t index, const Schedule& schedule) {
-    ctx.pending.push_back({.index = index, .schedule = schedule});
-}
-
-void context_result(Context& ctx, size_t index, datetime::Minutes offset) {
-    ctx.results.push_back({.index = index, .offset = offset});
-}
-
 bool handle_today(Context& ctx, size_t index, const Schedule& schedule) {
-    const auto& time_point = select_time(ctx.base, schedule);
-
-    if (match(schedule.date, time_point) && match(schedule.weekdays, time_point)) {
-        datetime::Minutes offset{};
-        if (closest_delta(offset, schedule.time, time_point)) {
-            context_result(ctx, index, offset);
-            return true;
-        }
-    }
-
-    context_pending(ctx, index, schedule);
-
-    return false;
+    return search::handle_today(search::closest_past, ctx, index, schedule);
 }
 
-bool handle_delta(Context& ctx, const Pending& pending) {
-    if (!pending.schedule.ok) {
-        return false;
-    }
-
-    const auto& time_point = select_time(ctx.current, pending.schedule);
-
-    if (match(pending.schedule.date, time_point) && match(pending.schedule.weekdays, time_point)) {
-        datetime::Minutes offset{ ctx.days - datetime::Days{ -1 }};
-        if (closest_delta_end_of_day(offset, pending.schedule.time, time_point)) {
-            offset -= to_minutes(select_time(ctx.base, pending.schedule));
-            context_result(ctx, pending.index, offset);
-            return true;
-        }
-    }
-
-    return false;
+bool handle_pending(Context& ctx, const Pending& pending) {
+    return search::handle_pending(search::closest_end_of_day, ctx, pending);
 }
 
 } // namespace restore
 
 namespace expect {
 
-std::bitset<24> mask_future_hours(const std::bitset<24>& lhs, int rhs) {
-    return lhs.to_ulong() & bits::fill_u32(rhs, 24);
-}
+struct Context : public search::Context {
+    explicit Context(const datetime::Context& ctx) :
+        search::Context(ctx)
+    {}
 
-std::bitset<60> mask_future_minutes(const std::bitset<60>& lhs, int rhs) {
-    return lhs.to_ullong() & bits::fill_u64(rhs, 60);
-}
+    bool next_delta(const datetime::Days&);
+    bool next();
+};
 
-TimeMatch mask_future(const TimeMatch& lhs, const tm& rhs) {
-    TimeMatch out;
-    out.hour = mask_future_hours(lhs.hour, rhs.tm_hour);
-    out.minute = mask_future_minutes(lhs.minute, rhs.tm_min);
-    out.flags = lhs.flags;
-
-    return out;
-}
-
-bool closest_delta(datetime::Minutes& out, const TimeMatch& lhs, const tm& rhs) {
-    auto future = mask_future(lhs, rhs);
-    if (lhs.hour[rhs.tm_hour]) {
-        auto minute = bits::first_set_u64(future.minute.to_ullong());
-        if (minute != 0) {
-            --minute;
-            out = datetime::Minutes{ minute - rhs.tm_min };
-            return true;
-        }
-
-        future.hour[rhs.tm_hour] = false;
-    }
-
-    auto hour = bits::first_set_u32(future.hour.to_ulong());
-    if (hour == 0) {
+bool Context::next_delta(const datetime::Days& days) {
+    if (days.count() == 0) {
         return false;
     }
 
-    auto minute = bits::first_set_u64(lhs.minute.to_ullong());
-    if (minute == 0) {
+    this->days += days;
+    this->current = datetime::delta(this->current, days);
+    if (this->current.timestamp < 0) {
         return false;
     }
-
-    --hour;
-    --minute;
-
-    out += to_minutes(hour, minute) - to_minutes(rhs);
 
     return true;
 }
 
+bool Context::next() {
+    return next_delta(datetime::Days{ 1 });
+}
+
+bool handle_today(Context& ctx, size_t index, const Schedule& schedule) {
+    return search::handle_today(search::closest_future, ctx, index, schedule);
+}
+
+bool handle_pending(Context& ctx, const Pending& pending) {
+    return search::handle_pending(search::closest_future, ctx, pending);
+}
+
 } // namespace expect
+
+namespace relative {
+
+enum class Type {
+    None,
+    Calendar,
+    Named,
+    Sunrise,
+    Sunset,
+};
+
+enum class Order {
+    None,
+    Before,
+    After,
+};
+
+struct Relative {
+    Type type { Type::None };
+    Order order { Order::None };
+
+    String name;
+    uint8_t data { 0 };
+
+    datetime::Minutes offset{};
+};
+
+} // namespace relative
+
+using relative::Relative;
+
+namespace event {
+
+struct TimePoint {
+    datetime::Minutes minutes{ -1 };
+    datetime::Seconds seconds{ -1 };
+};
+
+TimePoint make_time_point(datetime::Seconds seconds) {
+    TimePoint out;
+
+    out.seconds = seconds;
+    out.minutes =
+        std::chrono::duration_cast<datetime::Minutes>(out.seconds);
+    out.seconds -= out.minutes;
+
+    return out;
+}
+
+struct Event {
+    TimePoint next;
+    TimePoint last;
+};
+
+constexpr bool is_valid(const datetime::Minutes& minutes) {
+    return minutes >= datetime::Minutes::zero();
+}
+
+constexpr bool is_valid(const datetime::Seconds& seconds) {
+    return seconds >= datetime::Seconds::zero();
+}
+
+constexpr bool is_valid(const TimePoint& time_point) {
+    return is_valid(time_point.minutes)
+        && is_valid(time_point.seconds);
+}
+
+constexpr bool is_valid(const Event& event) {
+    return is_valid(event.next) && is_valid(event.last);
+}
+
+constexpr bool maybe_valid(const Event& event) {
+    return is_valid(event.next) || is_valid(event.last);
+}
+
+constexpr datetime::Seconds to_seconds(const TimePoint& time_point) {
+    return std::chrono::duration_cast<datetime::Seconds>(time_point.minutes)
+        + time_point.seconds;
+}
+
+constexpr datetime::Minutes difference(const datetime::Minutes& lhs, const datetime::Minutes& rhs) {
+    return lhs - rhs;
+}
+
+constexpr datetime::Minutes difference(const datetime::Context& ctx, const datetime::Minutes& rhs) {
+    return difference(to_minutes(ctx), rhs);
+}
+
+} // namespace event
+
+using event::TimePoint;
+using event::to_seconds;
+using event::make_time_point;
+
+using event::Event;
 
 } // namespace
 } // namespace scheduler
