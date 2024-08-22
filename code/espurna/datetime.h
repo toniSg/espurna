@@ -68,6 +68,10 @@ constexpr HhMmSs make_hh_mm_ss(const tm& t) {
     };
 }
 
+struct DateHhMmSs : public Date, public HhMmSs {
+    tm c_value() const noexcept;
+};
+
 Date from_days(const Days&) noexcept;
 
 // on esp8266 this is a usually an internal timestamp timeshift'ed with `micros64()`
@@ -184,6 +188,9 @@ constexpr Weekday next(Weekday day) {
 // Seconds since 1970/01/01. Helper function to replace mktime
 Seconds to_seconds(const Date&, const HhMmSs&) noexcept;
 Seconds to_seconds(const tm&) noexcept;
+
+// Either local or UTC conversion
+Seconds to_seconds(const DateHhMmSs&, bool) noexcept;
 
 // main use-case is scheduler, and it needs both tm results
 struct Context {
