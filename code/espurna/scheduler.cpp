@@ -1414,6 +1414,24 @@ Schedule load_schedule(size_t index) {
     return out;
 }
 
+bool match_schedule(const Schedule& schedule, const tm& time_point) {
+    if (!match(schedule.date, time_point)) {
+        return false;
+    }
+
+    if (!match(schedule.weekdays, time_point)) {
+        return false;
+    }
+
+    return match(schedule.time, time_point);
+}
+
+bool check_calendar(const datetime::Context& ctx, size_t index) {
+    const auto schedule = load_schedule(index);
+    return schedule.ok
+        && match_schedule(schedule, select_time(ctx, schedule));
+}
+
 namespace restore {
 
 [[gnu::used]]
@@ -1895,24 +1913,6 @@ void handle_after(const datetime::Context& ctx, Prepared& prepared) {
 }
 
 } // namespace relative
-
-bool match_schedule(const Schedule& schedule, const tm& time_point) {
-    if (!match(schedule.date, time_point)) {
-        return false;
-    }
-
-    if (!match(schedule.weekdays, time_point)) {
-        return false;
-    }
-
-    return match(schedule.time, time_point);
-}
-
-bool check_calendar(const datetime::Context& ctx, size_t index) {
-    const auto schedule = load_schedule(index);
-    return schedule.ok
-        && match_schedule(schedule, select_time(ctx, schedule));
-}
 
 void handle_calendar(const datetime::Context& ctx, Span<Type> types) {
     for (size_t index = 0; index < types.size(); ++index) {
