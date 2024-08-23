@@ -905,7 +905,7 @@ String sunrise_sunset(const sun::EventMatch& match) {
 }
 
 void format_output(::terminal::CommandContext& ctx, const String& prefix, const String& value) {
-    ctx.output.printf_P(PSTR("%s%s%s\n"),
+    ctx.output.printf_P(PSTR("- %s%s%s\n"),
         prefix.c_str(),
         value.length()
             ? PSTR(" at ")
@@ -973,7 +973,7 @@ void event(::terminal::CommandContext&& ctx) {
             }
 
             const auto seconds = to_seconds(entry.time_point);
-            ctx.output.printf_P(PSTR("\"%s\" at %s\n"),
+            ctx.output.printf_P(PSTR("- \"%s\" at %s\n"),
                 entry.name.c_str(),
                 datetime::format_local_tz(seconds.count()).c_str());
 
