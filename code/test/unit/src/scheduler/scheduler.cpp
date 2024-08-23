@@ -654,6 +654,30 @@ void test_event_parsing() {
         result.offset.count());
     TEST_ASSERT_EQUAL(123, result.data);
 
+    result = parse_relative("0m after calendar#46");
+    TEST_ASSERT_EQUAL(relative::Order::After, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Calendar, result.type);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes::zero().count(),
+        result.offset.count());
+    TEST_ASSERT_EQUAL(46, result.data);
+
+    result = parse_relative("0h before \"after\"");
+    TEST_ASSERT_EQUAL(relative::Order::Before, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Named, result.type);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes::zero().count(),
+        result.offset.count());
+    TEST_ASSERT_EQUAL_STRING("after", result.name.c_str());
+
+    result = parse_relative("0 after \"before\"");
+    TEST_ASSERT_EQUAL(relative::Order::After, result.order);
+    TEST_ASSERT_EQUAL(relative::Type::Named, result.type);
+    TEST_ASSERT_EQUAL(
+        datetime::Minutes::zero().count(),
+        result.offset.count());
+    TEST_ASSERT_EQUAL_STRING("before", result.name.c_str());
+
     result = parse_relative("after calendar#543");
     TEST_ASSERT_EQUAL(relative::Type::None, result.type);
 
