@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 - Scheduler [relative time spec](https://github.com/xoseperez/espurna/wiki/Scheduler#relative-time) [8edb7b63](https://github.com/xoseperez/espurna/commit/8edb7b633369cd04151525066ab0f8b512da7702)
+- `TIMER [<ID>] [<TIME>]` relay command in addition to `PULSE` [90827850](https://github.com/xoseperez/espurna/commit/90827850be35f7ad3079a1b66d0053e5ec51e95d)
 
 ### Fixed
 - Calculate offset time using local timezone instead of directly comparing wall clock when restoring scheduled actions [f82cd221](https://github.com/xoseperez/espurna/commit/f82cd2211e841a0093ab29ccaebf363397c669e4)
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 - Median filter uses REPORT counter as window, not a fixed size of 3. Values are reported as-is until internal buffers are filled, median value is reported afterwards [#2543](https://github.com/xoseperez/espurna/issues/2543)
 - Various WebUI labels and messages clean-up
+- `PULSE <ID>` and `TIMER <ID>` display existing relay timers [90827850](https://github.com/xoseperez/espurna/commit/90827850be35f7ad3079a1b66d0053e5ec51e95d)
 
 ## [1.17.0] (dev)
 
