@@ -236,7 +236,6 @@ def app_patch_cachedir(env):
     File.get_cachedir_bsig = patched_get_cachedir_bsig
 
 
-# patch framework-arduinoespressif8266 @ 3.20704.0 (2.7.4) elf2bin .py
 # using modified platform_elf2bin.py, changed locally w/ upstream changes
 # ref. https://github.com/esp8266/Arduino/commits/3.1.2/tools/elf2bin.py
 # - backport 'Fix syntax warning' at https://github.com/esp8266/Arduino/pull/9034
@@ -244,18 +243,25 @@ def app_patch_cachedir(env):
 # - only partially backport https://github.com/esp8266/Arduino/pull/7844
 #   as it changes eboot blob as well as crc location and .ld script(s)
 def app_patch_elf2bin(env):
-    KNOWN_PLATFORMS = ("2_6_3", "4_2_0")
+    KNOWN_VERSIONS = (
+        # framework-arduinoespressif8266 @ 3.20704.0 (2.7.4)
+        "3_20704_0",
+        # framework-arduinoespressif8266 @ 3.30102.0 (3.1.2)
+        "3_30102_0",
+    )
 
     platform = env.PioPlatform()
-    version = platform.version.replace(".", "_")
 
-    if not version in KNOWN_PLATFORMS:
+    framework_version = platform.get_package_version("framework-arduinoespressif8266")
+    version = framework_version.replace(".", "_")
+
+    if not version in KNOWN_VERSIONS:
         return
 
     builder = env["BUILDERS"]["ElfToBin"]
 
-    cmd_list = builder.action.cmd_list.split(' ')
+    cmd_list = builder.action.cmd_list.split(" ")
     elf2bin = env.File(cmd_list[1])
 
     cmd_list[1] = env.subst(f"${{PROJECT_DIR}}/scripts/platform_elf2bin_{version}.py")
-    builder.action.cmd_list = ' '.join(cmd_list)
+    builder.action.cmd_list = " ".join(cmd_list)
