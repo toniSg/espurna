@@ -1557,14 +1557,8 @@ struct Source {
     virtual ~Source();
 
     virtual const datetime::Minutes& minutes() const = 0;
-
-    virtual bool before(const datetime::Context&) {
-        return true;
-    }
-
-    virtual bool after(const datetime::Context&) {
-        return true;
-    }
+    virtual bool before(const datetime::Context&) = 0;
+    virtual bool after(const datetime::Context&) = 0;
 };
 
 constexpr datetime::Minutes Source::DefaultMinutes;
