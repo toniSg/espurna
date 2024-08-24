@@ -68,9 +68,32 @@ constexpr HhMmSs make_hh_mm_ss(const tm& t) {
     };
 }
 
-struct DateHhMmSs : public Date, public HhMmSs {
+struct DateHhMmSs {
+    int year;
+    int month;
+    int day;
+    int hours;
+    int minutes;
+    int seconds;
+
     tm c_value() const noexcept;
 };
+
+constexpr Date make_date(const DateHhMmSs& datetime) {
+    return Date{
+        .year = datetime.year,
+        .month = datetime.month,
+        .day = datetime.day,
+    };
+}
+
+constexpr HhMmSs make_hh_mm_ss(const DateHhMmSs& datetime) {
+    return HhMmSs{
+        .hours = datetime.hours,
+        .minutes = datetime.minutes,
+        .seconds = datetime.seconds,
+    };
+}
 
 Date from_days(const Days&) noexcept;
 

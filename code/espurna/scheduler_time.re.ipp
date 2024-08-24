@@ -1922,6 +1922,82 @@ return_out:
     return out && (YYCURSOR == YYLIMIT);
 }
 
+// 2024-08-24T19:18:25+00:00
+// 2024-08-24T19:18:25Z
+// 2024-08-25T07:18:25
+// 2024-08-25T07:18:25+12:00
+
+namespace iso8601 {
+
+constexpr StringView year(StringView view) {
+    return StringView(&view[0], 4);
+}
+
+constexpr StringView month(StringView view) {
+    return StringView(&view[5], 2);
+}
+
+constexpr StringView day(StringView view) {
+    return StringView(&view[8], 2);
+}
+
+constexpr StringView hour(StringView view) {
+    return StringView(&view[11], 2);
+}
+
+constexpr StringView minute(StringView view) {
+    return StringView(&view[14], 2);
+}
+
+constexpr StringView second(StringView view) {
+    return StringView(&view[17], 2);
+}
+
+constexpr StringView tz(StringView view) {
+    return (view.length() == 19)
+        ? StringView{}
+        : StringView(&view[20], &view[view.length()]);
+}
+
+constexpr int from_one_digit(char value) {
+    return ((value >= '0') && (value <= '9'))
+        ? (value - '0')
+        : 0;
+}
+
+constexpr int from_two_digits(StringView view) {
+    return (from_one_digit(view.data()[0]) * 10)
+         + from_one_digit(view.data()[1]);
+}
+
+constexpr int from_four_digits(StringView view) {
+    return (from_one_digit(view.data()[0]) * 1000)
+         + (from_one_digit(view.data()[1]) * 100)
+         + (from_one_digit(view.data()[2]) * 10)
+         + from_one_digit(view.data()[3]);
+}
+
+constexpr bool is_valid(const datetime::DateHhMmSs& datetime) {
+    return (datetime.month < 13) && (datetime.month > 0)
+        && (datetime.day < 32) && (datetime.day > 0)
+        && (datetime.hours < 24)
+        && (datetime.minutes < 60)
+        && (datetime.seconds < 60);
+}
+
+constexpr datetime::DateHhMmSs make_datetime(StringView view) {
+    return datetime::DateHhMmSs{
+        .year = from_four_digits(year(view)),
+        .month = from_two_digits(month(view)),
+        .day = from_two_digits(day(view)),
+        .hours = from_two_digits(hour(view)),
+        .minutes = from_two_digits(minute(view)),
+        .seconds = from_two_digits(second(view)),
+    };
+}
+
+} // namespace iso8601
+
 bool parse_simple_iso8601(datetime::DateHhMmSs& datetime, bool& utc, StringView view) {
     const char* YYCURSOR { view.begin() };
     const char* YYLIMIT { view.end() };
@@ -1933,23 +2009,23 @@ bool parse_simple_iso8601(datetime::DateHhMmSs& datetime, bool& utc, StringView 
     const char *p;
 
     
-#line 1937 "espurna/scheduler_time.re.ipp"
+#line 2013 "espurna/scheduler_time.re.ipp"
 enum YYCONDTYPE {
 	yycinit,
 	yyctz
 };
-#line 816 "espurna/scheduler_time.re"
+#line 892 "espurna/scheduler_time.re"
 
     int c = yycinit;
 
     
-#line 1947 "espurna/scheduler_time.re.ipp"
-#line 819 "espurna/scheduler_time.re"
+#line 2023 "espurna/scheduler_time.re.ipp"
+#line 895 "espurna/scheduler_time.re"
 
 
 loop:
     
-#line 1953 "espurna/scheduler_time.re.ipp"
+#line 2029 "espurna/scheduler_time.re.ipp"
 {
 	char yych;
 	switch (c) {
@@ -1968,12 +2044,12 @@ yyc_init:
 yy186:
 	++YYCURSOR;
 yy187:
-#line 914 "espurna/scheduler_time.re"
+#line 943 "espurna/scheduler_time.re"
 	{
         out = false;
         goto return_out;
       }
-#line 1977 "espurna/scheduler_time.re.ipp"
+#line 2053 "espurna/scheduler_time.re.ipp"
 yy188:
 	yych = *(YYMARKER = ++YYCURSOR);
 	switch (yych) {
@@ -2089,72 +2165,25 @@ yy207:
 	++YYCURSOR;
 	p = YYCURSOR - 19;
 	c = yyctz;
-#line 844 "espurna/scheduler_time.re"
+#line 920 "espurna/scheduler_time.re"
 	{
-        tmp = StringView{p, p + 4};
-        const auto year = parseUnsigned(tmp, 10);
-        if (!year.ok) {
+        tmp = StringView{p, YYCURSOR};
+
+        datetime = iso8601::make_datetime(tmp);
+        if (!iso8601::is_valid(datetime)) {
           goto return_out;
         }
-
-        p += 5;
-        tmp = StringView{p , p + 2};
-
-        const auto month = parseUnsigned(tmp, 10);
-        if (!month.ok || (month.value > 12) || (month.value < 1)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto day = parseUnsigned(tmp, 10);
-        if (!day.ok || (day.value > 31) || (day.value < 1)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto hour = parseUnsigned(tmp, 10);
-        if (!hour.ok || (hour.value > 23)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto min = parseUnsigned(tmp, 10);
-        if (!min.ok || (min.value > 59)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto sec = parseUnsigned(tmp, 10);
-        if (!sec.ok || (sec.value > 59)) {
-          goto return_out;
-        }
-
-        datetime.year = year.value;
-        datetime.month = month.value;
-        datetime.day = day.value;
-
-        datetime.hours = hour.value;
-        datetime.minutes = min.value;
-        datetime.seconds = sec.value;
 
         goto loop;
       }
-#line 2151 "espurna/scheduler_time.re.ipp"
+#line 2180 "espurna/scheduler_time.re.ipp"
 yy208:
-#line 919 "espurna/scheduler_time.re"
+#line 948 "espurna/scheduler_time.re"
 	{
         out = false;
         goto return_out;
       }
-#line 2158 "espurna/scheduler_time.re.ipp"
+#line 2187 "espurna/scheduler_time.re.ipp"
 /* *********************************** */
 yyc_tz:
 	yych = *YYCURSOR;
@@ -2168,12 +2197,12 @@ yyc_tz:
 yy210:
 	++YYCURSOR;
 yy211:
-#line 914 "espurna/scheduler_time.re"
+#line 943 "espurna/scheduler_time.re"
 	{
         out = false;
         goto return_out;
       }
-#line 2177 "espurna/scheduler_time.re.ipp"
+#line 2206 "espurna/scheduler_time.re.ipp"
 yy212:
 	yych = *(YYMARKER = ++YYCURSOR);
 	switch (yych) {
@@ -2182,13 +2211,13 @@ yy212:
 	}
 yy213:
 	++YYCURSOR;
-#line 902 "espurna/scheduler_time.re"
+#line 931 "espurna/scheduler_time.re"
 	{
         out = true;
         utc = true;
         goto return_out;
       }
-#line 2192 "espurna/scheduler_time.re.ipp"
+#line 2221 "espurna/scheduler_time.re.ipp"
 yy214:
 	yych = *++YYCURSOR;
 	switch (yych) {
@@ -2217,15 +2246,15 @@ yy218:
 		default: goto yy215;
 	}
 yy219:
-#line 908 "espurna/scheduler_time.re"
+#line 937 "espurna/scheduler_time.re"
 	{
         out = true;
         utc = false;
         goto return_out;
       }
-#line 2227 "espurna/scheduler_time.re.ipp"
+#line 2256 "espurna/scheduler_time.re.ipp"
 }
-#line 923 "espurna/scheduler_time.re"
+#line 952 "espurna/scheduler_time.re"
 
 
 return_out:

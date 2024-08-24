@@ -803,6 +803,82 @@ return_out:
     return out && (YYCURSOR == YYLIMIT);
 }
 
+// 2024-08-24T19:18:25+00:00
+// 2024-08-24T19:18:25Z
+// 2024-08-25T07:18:25
+// 2024-08-25T07:18:25+12:00
+
+namespace iso8601 {
+
+constexpr StringView year(StringView view) {
+    return StringView(&view[0], 4);
+}
+
+constexpr StringView month(StringView view) {
+    return StringView(&view[5], 2);
+}
+
+constexpr StringView day(StringView view) {
+    return StringView(&view[8], 2);
+}
+
+constexpr StringView hour(StringView view) {
+    return StringView(&view[11], 2);
+}
+
+constexpr StringView minute(StringView view) {
+    return StringView(&view[14], 2);
+}
+
+constexpr StringView second(StringView view) {
+    return StringView(&view[17], 2);
+}
+
+constexpr StringView tz(StringView view) {
+    return (view.length() == 19)
+        ? StringView{}
+        : StringView(&view[20], &view[view.length()]);
+}
+
+constexpr int from_one_digit(char value) {
+    return ((value >= '0') && (value <= '9'))
+        ? (value - '0')
+        : 0;
+}
+
+constexpr int from_two_digits(StringView view) {
+    return (from_one_digit(view.data()[0]) * 10)
+         + from_one_digit(view.data()[1]);
+}
+
+constexpr int from_four_digits(StringView view) {
+    return (from_one_digit(view.data()[0]) * 1000)
+         + (from_one_digit(view.data()[1]) * 100)
+         + (from_one_digit(view.data()[2]) * 10)
+         + from_one_digit(view.data()[3]);
+}
+
+constexpr bool is_valid(const datetime::DateHhMmSs& datetime) {
+    return (datetime.month < 13) && (datetime.month > 0)
+        && (datetime.day < 32) && (datetime.day > 0)
+        && (datetime.hours < 24)
+        && (datetime.minutes < 60)
+        && (datetime.seconds < 60);
+}
+
+constexpr datetime::DateHhMmSs make_datetime(StringView view) {
+    return datetime::DateHhMmSs{
+        .year = from_four_digits(year(view)),
+        .month = from_two_digits(month(view)),
+        .day = from_two_digits(day(view)),
+        .hours = from_two_digits(hour(view)),
+        .minutes = from_two_digits(minute(view)),
+        .seconds = from_two_digits(second(view)),
+    };
+}
+
+} // namespace iso8601
+
 bool parse_simple_iso8601(datetime::DateHhMmSs& datetime, bool& utc, StringView view) {
     const char* YYCURSOR { view.begin() };
     const char* YYLIMIT { view.end() };
@@ -842,59 +918,12 @@ loop:
       zulu = "Z";
 
       <init> @p YYYY [-] MM [-] DD [T] hh [:] mm [:] ss => tz {
-        tmp = StringView{p, p + 4};
-        const auto year = parseUnsigned(tmp, 10);
-        if (!year.ok) {
+        tmp = StringView{p, YYCURSOR};
+
+        datetime = iso8601::make_datetime(tmp);
+        if (!iso8601::is_valid(datetime)) {
           goto return_out;
         }
-
-        p += 5;
-        tmp = StringView{p , p + 2};
-
-        const auto month = parseUnsigned(tmp, 10);
-        if (!month.ok || (month.value > 12) || (month.value < 1)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto day = parseUnsigned(tmp, 10);
-        if (!day.ok || (day.value > 31) || (day.value < 1)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto hour = parseUnsigned(tmp, 10);
-        if (!hour.ok || (hour.value > 23)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto min = parseUnsigned(tmp, 10);
-        if (!min.ok || (min.value > 59)) {
-          goto return_out;
-        }
-
-        p += 3;
-        tmp = StringView{p , p + 2};
-
-        const auto sec = parseUnsigned(tmp, 10);
-        if (!sec.ok || (sec.value > 59)) {
-          goto return_out;
-        }
-
-        datetime.year = year.value;
-        datetime.month = month.value;
-        datetime.day = day.value;
-
-        datetime.hours = hour.value;
-        datetime.minutes = min.value;
-        datetime.seconds = sec.value;
 
         goto loop;
       }

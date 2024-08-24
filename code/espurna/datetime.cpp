@@ -173,7 +173,9 @@ Seconds to_seconds(const tm& t) noexcept {
 
 Seconds to_seconds(const DateHhMmSs& datetime, bool utc) noexcept {
     if (utc) {
-        return to_seconds(Date(datetime), HhMmSs(datetime));
+        return to_seconds(
+            make_date(datetime),
+            make_hh_mm_ss(datetime));
     }
 
     auto c_value = datetime.c_value();
