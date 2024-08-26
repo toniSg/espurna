@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 - Scheduler [relative time spec](https://github.com/xoseperez/espurna/wiki/Scheduler#relative-time) [8edb7b63](https://github.com/xoseperez/espurna/commit/8edb7b633369cd04151525066ab0f8b512da7702)
+- Scheduler [named events](https://github.com/xoseperez/espurna/wiki/Scheduler#event) [8edb7b63](https://github.com/xoseperez/espurna/commit/8edb7b633369cd04151525066ab0f8b512da7702), [a8bcedab](https://github.com/xoseperez/espurna/commit/a8bcedabc581fb2ed592bdce1693ad0844ec1609)
 - `TIMER [<ID>] [<TIME>]` relay command in addition to `PULSE` [90827850](https://github.com/xoseperez/espurna/commit/90827850be35f7ad3079a1b66d0053e5ec51e95d)
 
 ### Fixed
-- Calculate offset time using local timezone instead of directly comparing wall clock when restoring scheduled actions [f82cd221](https://github.com/xoseperez/espurna/commit/f82cd2211e841a0093ab29ccaebf363397c669e4)
+- Restore & event offsets are calculated using local timezone when necessary [eea56d7a](https://github.com/xoseperez/espurna/commit/eea56d7a0c082745743c29f662fc185338edcd0f)
 - Schedule incorrectly discarded when sunrise or sunset flag was not set [24ebcb84](https://github.com/xoseperez/espurna/commit/24ebcb843054bd328b040e6302d2fd63322fd6c2)
 - Visual bug w/ password reveal button when using narrow screen [4c005fa9](https://github.com/xoseperez/espurna/commit/4c005fa9a53af08043821975b350ab8a8c899e38)
 
