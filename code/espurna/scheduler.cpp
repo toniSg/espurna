@@ -139,12 +139,18 @@ String format_named_event(datetime::Minutes minutes) {
     return datetime::format_local_tz(seconds.count());
 }
 
-void cleanup_named_events(const datetime::Context& ctx) {
-    named_events.remove_if(
-        [&](const NamedEvent& entry) {
+template <typename Container>
+void cleanup_entries_impl(const datetime::Context& ctx, Container& container, datetime::Minutes ttl) {
+    const auto minutes = to_minutes(ctx);
+    container.remove_if(
+        [&](const typename Container::value_type& entry) {
             return !event::is_valid(entry.minutes)
-                || (datetime::Seconds(ctx.timestamp) - datetime::Seconds(entry.minutes)) > EventTtl;
+                || (minutes - entry.minutes) > ttl;
         });
+}
+
+void cleanup_named_events(const datetime::Context& ctx) {
+    cleanup_entries_impl(ctx, named_events, EventTtl);
 }
 
 constexpr auto LastTtl = datetime::Days{ 1 };
@@ -200,11 +206,7 @@ datetime::Minutes action_timestamp(size_t index) {
 }
 
 void cleanup_action_timestamps(const datetime::Context& ctx) {
-    const auto minutes = to_minutes(ctx);
-    last_minutes.remove_if(
-        [&](const Last& last) {
-            return (minutes - last.minutes) > LastTtl;
-        });
+    cleanup_entries_impl(ctx, last_minutes, LastTtl);
 }
 
 #if SCHEDULER_SUN_SUPPORT
