@@ -74,7 +74,7 @@ constexpr auto EventsMax = size_t{ 4 };
 
 struct NamedEvent {
     String name;
-    TimePoint time_point;
+    datetime::Minutes minutes;
 };
 
 std::forward_list<NamedEvent> named_events;
@@ -97,7 +97,7 @@ NamedEvent* find_named(StringView name) {
 bool named_event(String name, datetime::Seconds seconds) {
     auto it = find_named(name);
     if (it) {
-        it->time_point = make_time_point(seconds);
+        it->minutes = to_minutes(seconds);
         return true;
     }
 
@@ -113,7 +113,7 @@ bool named_event(String name, datetime::Seconds seconds) {
         named_events.push_front(
             NamedEvent{
                 .name = std::move(name),
-                .time_point = make_time_point(seconds),
+                .minutes = to_minutes(seconds),
             });
 
         return true;
@@ -122,11 +122,28 @@ bool named_event(String name, datetime::Seconds seconds) {
     return false;
 }
 
+bool named_event(String name, StringView value) {
+    datetime::DateHhMmSs datetime;
+    bool utc { false };
+
+    const auto result = parse_simple_iso8601(datetime, utc, value);
+    if (!result) {
+        return false;
+    }
+
+    return named_event(std::move(name), to_seconds(datetime, utc));
+}
+
+String format_named_event(datetime::Minutes minutes) {
+    const auto seconds = datetime::Seconds(minutes);
+    return datetime::format_local_tz(seconds.count());
+}
+
 void cleanup_named_events(const datetime::Context& ctx) {
     named_events.remove_if(
         [&](const NamedEvent& entry) {
-            return !event::is_valid(entry.time_point)
-                || (datetime::Seconds(ctx.timestamp) - to_seconds(entry.time_point)) > EventTtl;
+            return !event::is_valid(entry.minutes)
+                || (datetime::Seconds(ctx.timestamp) - datetime::Seconds(entry.minutes)) > EventTtl;
         });
 }
 
@@ -972,10 +989,9 @@ void event(::terminal::CommandContext&& ctx) {
                 once = false;
             }
 
-            const auto seconds = to_seconds(entry.time_point);
             ctx.output.printf_P(PSTR("- \"%s\" at %s\n"),
                 entry.name.c_str(),
-                datetime::format_local_tz(seconds.count()).c_str());
+                format_named_event(entry.minutes).c_str());
 
             if (name.length()) {
                 terminalOK(ctx);
@@ -997,21 +1013,12 @@ void event(::terminal::CommandContext&& ctx) {
         return;
     }
 
-    datetime::DateHhMmSs datetime;
-    bool utc { false };
-
-    const auto result = parse_simple_iso8601(datetime, utc, ctx.argv[2]);
-    if (!result) {
-        terminalError(ctx, STRING_VIEW("Invalid datetime"));
+    if (named_event(std::move(ctx.argv[1]), ctx.argv[2])) {
+        terminalOK(ctx);
         return;
     }
 
-    if (!named_event(std::move(ctx.argv[1]), to_seconds(datetime, utc))) {
-        terminalError(ctx, STRING_VIEW("Cannot add more events"));
-        return;
-    }
-
-    terminalOK(ctx);
+    terminalError(ctx, STRING_VIEW("Cannot set event"));
 }
 
 static constexpr ::terminal::Command Commands[] PROGMEM {
@@ -1205,15 +1212,99 @@ bool set(ApiRequest& req, JsonObject& root) {
     return false;
 }
 
-} // namespace schedule
+} // namespace schedules
+
+constexpr char Events[] = "events";
+constexpr char Name[] = "name";
+constexpr char Datetime[] = "datetime";
+
+namespace events {
+
+bool get(ApiRequest& req, JsonObject& root) {
+    const auto param = req.wildcard(0);
+
+    auto& events = root.createNestedArray(Events);
+    for (auto& event : named_events) {
+        auto& entry = events.createNestedObject();
+        entry[Name] = event.name.c_str();
+        entry[Datetime] = format_named_event(event.minutes);
+    }
+
+    return true;
+}
+
+} // namespace events
+
+namespace event {
+
+bool get(ApiRequest& req, JsonObject& root) {
+    const auto param = req.wildcard(0);
+
+    const auto it = find_named(param);
+    if (it) {
+        root[Datetime] = format_named_event((*it).minutes);
+        return true;
+    }
+
+    return false;
+}
+
+bool set(ApiRequest& req, JsonObject& root) {
+    const auto datetime = root[Datetime];
+    if (!datetime.success() || !datetime.is<String>()) {
+        return false;
+    }
+
+    return named_event(
+        req.wildcard(0), datetime.as<String>());
+}
+
+} // namespace event
 
 void setup() {
     apiRegister(F(MQTT_TOPIC_SCHEDULE), schedules::get, schedules::set);
     apiRegister(F(MQTT_TOPIC_SCHEDULE "/+"), schedule::get, schedule::set);
+
+    apiRegister(F(MQTT_TOPIC_NAMED_EVENT), events::get, nullptr);
+    apiRegister(F(MQTT_TOPIC_NAMED_EVENT "/+"), event::get, event::set);
 }
 
 } // namespace api
 #endif  // API_SUPPORT
+
+// -----------------------------------------------------------------------------
+#if MQTT_SUPPORT
+namespace mqtt {
+
+void callback(unsigned int type, StringView topic, StringView payload) {
+    if (type == MQTT_CONNECT_EVENT) {
+        mqttSubscribe(MQTT_TOPIC_NAMED_EVENT "/+");
+        return;
+    }
+
+    STRING_VIEW_INLINE(Topic, MQTT_TOPIC_NAMED_EVENT);
+    if (type == MQTT_MESSAGE_EVENT) {
+        const auto t = mqttMagnitude(topic);
+        if (!t.startsWith(Topic)) {
+            return;
+        }
+
+        const auto name = t.slice(Topic.length() + 1);
+        if (!name.length()) {
+            return;
+        }
+
+        named_event(name.toString(), payload);
+        return;
+    }
+}
+
+void setup() {
+    ::mqttRegister(callback);
+}
+
+} // namespace mqtt
+#endif
 
 // -----------------------------------------------------------------------------
 
@@ -1663,7 +1754,7 @@ private:
     bool _reset_minutes(StringView name) {
         const auto it = find_named(name);
         if (it) {
-            _minutes = it->time_point.minutes;
+            _minutes = it->minutes;
         }
 
         return event::is_valid(_minutes);
@@ -1984,6 +2075,9 @@ void setup() {
 #endif
 #if API_SUPPORT
     api::setup();
+#endif
+#if MQTT_SUPPORT
+    mqtt::setup();
 #endif
 
     ntpOnTick(tick);

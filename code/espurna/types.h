@@ -343,6 +343,9 @@ struct StringView {
     bool startsWith(StringView) const;
     bool endsWith(StringView) const;
 
+    StringView slice(size_t index, size_t end) const;
+    StringView slice(size_t index) const;
+
 private:
 #if defined(HOST_MOCK)
     constexpr static bool inFlash(const char*) {

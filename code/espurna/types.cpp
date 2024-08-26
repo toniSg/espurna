@@ -152,6 +152,22 @@ bool StringView::endsWith(StringView other) const {
     return false;
 }
 
+StringView StringView::slice(size_t index, size_t len) const {
+    if (index >= _len) {
+        return StringView();
+    }
+
+    if ((index + len) > _len) {
+        return StringView();
+    }
+
+    return StringView(_ptr + index, len);
+}
+
+StringView StringView::slice(size_t index) const {
+    return slice(index, _len - index);
+}
+
 bool SplitStringView::next() {
     if (!_view.length()) {
         return false;
