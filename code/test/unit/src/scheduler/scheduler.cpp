@@ -4,18 +4,11 @@
 #include <StreamString.h>
 #include <ArduinoJson.h>
 
-#include <espurna/utils.h>
-#include <espurna/scheduler_time.re.ipp>
-#include <espurna/scheduler_common.ipp>
-
-#include <ctime>
-
-#include <array>
-#include <iomanip>
-#include <iostream>
-
 #include <string_view>
 using namespace std::string_view_literals;
+
+#include <iomanip>
+#include <iostream>
 
 std::string_view wday(int value) {
     switch (value) {
@@ -43,17 +36,74 @@ std::ostream& operator<<(std::ostream& out, const tm& t) {
     out << (1900 + t.tm_year)
         << '-' << std::setw(2) << (1 + t.tm_mon)
         << '-' << std::setw(2) << t.tm_mday
-        << ' ' << wday(t.tm_wday) << ' '
-        << t.tm_yday << "y "
-        << t.tm_hour << ':' << t.tm_min << ':' << t.tm_sec
-        << ((t.tm_isdst == 1) ? " DST" : "");
+        << ' ' << wday(t.tm_wday) << ' ';
+
+    if (t.tm_hour < 10) {
+        out << '0';
+    }
+
+    out << t.tm_hour << ':';
+
+    if (t.tm_min < 10) {
+        out << '0';
+    }
+
+    out << t.tm_min << ':';
+
+    if (t.tm_sec < 10) {
+        out << '0';
+    }
+
+    out << t.tm_sec << ' ';
+
+    if (t.tm_isdst > 0) {
+        out << "DST";
+    } else if (t.tm_isdst == 0) {
+        out << "SDT";
+    } else {
+        out << "*";
+    }
 
     return out;
 }
 
+// on-device, these can only *only* be TZ variables. locally, depends on tzdata.
+// currently, only used in DST <-> SDT tests. general schedule tests are in UTC
+struct WithTimezone {
+    explicit WithTimezone(const char* tz) :
+        _tz(getenv("TZ"))
+    {
+        setenv("TZ", tz, 1);
+        tzset();
+    }
+
+    ~WithTimezone() {
+        if (_tz.length()) {
+            setenv("TZ", _tz.c_str(), 1);
+        } else {
+            unsetenv("TZ");
+        }
+
+        tzset();
+    }
+
+private:
+    String _tz;
+};
+
+#include <espurna/utils.h>
+#include <espurna/scheduler_common.ipp>
+#include <espurna/scheduler_time.re.ipp>
+
+#include <ctime>
+
+#include <array>
+
 namespace espurna {
 namespace scheduler {
 namespace {
+
+constexpr auto OneHour = datetime::Seconds(datetime::Hours(1));
 
 namespace restore {
 
@@ -73,6 +123,7 @@ void Context::destroy() {
 
 namespace test {
 
+// at 2006-01-02T15:04:05-07:00 TZ='US/Pacific'
 static constexpr auto ReferenceTimestamp = time_t{ 1136239445 };
 
 #define MAKE_TIMEPOINT(NAME)\
@@ -581,6 +632,164 @@ void test_restore_delta_past() {
     }
 }
 
+void test_restore_dst_sdt() {
+    WithTimezone _(":US/Pacific");
+
+    // at 2006-10-29T02:33:04-08:00 TZ='US/Pacific'
+    constexpr auto Timestamp = time_t{ 1162117984 };
+
+    auto ctx = datetime::make_context(Timestamp);
+
+    Schedule sch;
+    sch.ok = true;
+
+    // to 2006-10-29T01:32:04-08:00 TZ='US/Pacific'
+    sch.time.hour[1] = true;
+    sch.time.minute[32] = true;
+
+#define POP_BACK(OUT, RESULTS)\
+    TEST_ASSERT_EQUAL(1, (RESULTS).size());\
+    OUT = (RESULTS).back();\
+    (RESULTS).pop_back()
+
+    Offset result;
+
+    auto restore = std::make_unique<restore::Context>(ctx);
+    TEST_ASSERT(handle_today(*restore, 321, sch));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(321, result.index);
+    TEST_ASSERT_EQUAL(-61, result.offset.count());
+
+    // to 2006-10-29T00:55:04-07:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[0] = true;
+    sch.time.minute[55] = true;
+
+    TEST_ASSERT(handle_today(*restore, 654, sch));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(654, result.index);
+    TEST_ASSERT_EQUAL(-158, result.offset.count());
+
+    // at 2006-10-29T01:33:04-08:00 TZ='US/Pacific'
+    ctx = datetime::make_context(Timestamp - OneHour.count());
+    restore = std::make_unique<restore::Context>(ctx);
+
+    // to 2006-10-29T00:11:04-07:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[0] = true;
+    sch.time.minute[11] = true;
+
+    TEST_ASSERT(handle_today(*restore, 987, sch));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(987, result.index);
+    TEST_ASSERT_EQUAL(-142, result.offset.count());
+
+    // to 2006-10-29T01:30:04-08:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[1] = true;
+    sch.time.minute[30] = true;
+
+    TEST_ASSERT(handle_today(*restore, 567, sch));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(567, result.index);
+    TEST_ASSERT_EQUAL(-3, result.offset.count());
+
+    // to 2006-10-29T01:44:04-07:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[1] = true;
+    sch.time.minute[44] = true;
+
+    TEST_ASSERT(handle_today(*restore, 678, sch));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(678, result.index);
+    TEST_ASSERT_EQUAL(-49, result.offset.count());
+
+    // to 2006-10-28T21:00:04-07:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[21] = true;
+    sch.time.minute[0] = true;
+
+    TEST_ASSERT_FALSE(handle_today(*restore, 912, sch));
+    TEST_ASSERT(restore->next());
+
+    TEST_ASSERT(handle_pending(*restore, restore->pending.back()));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(912, result.index);
+    TEST_ASSERT_EQUAL(-333, result.offset.count());
+
+#undef POP_BACK
+}
+
+void test_restore_sdt_dst() {
+    WithTimezone _(":US/Pacific");
+
+    // at 2006-04-02T04:33:04-07:00 TZ='US/Pacific'
+    constexpr auto Timestamp = time_t{ 1143977584 };
+
+    auto ctx = datetime::make_context(Timestamp);
+
+    Schedule sch;
+    sch.ok = true;
+
+    // to invalid 2006-04-02T02:54:04-08:00 TZ='US/Pacific'
+    sch.time.hour[2] = true;
+    sch.time.minute[54] = true;
+
+    // to 2006-04-02T01:54:04-08:00 TZ='US/Pacific'
+    sch.time.hour[1] = true;
+
+#define POP_BACK(OUT, RESULTS)\
+    TEST_ASSERT_EQUAL(1, (RESULTS).size());\
+    OUT = (RESULTS).back();\
+    (RESULTS).pop_back()
+
+    Offset result;
+
+    auto restore = std::make_unique<restore::Context>(ctx);
+    TEST_ASSERT(handle_today(*restore, 579, sch));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(579, result.index);
+    TEST_ASSERT_EQUAL(-99, result.offset.count());
+
+    // to 2006-04-02T00:05:04-08:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[0] = true;
+    sch.time.minute[5] = true;
+
+    TEST_ASSERT(handle_today(*restore, 135, sch));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(135, result.index);
+    TEST_ASSERT_EQUAL(-208, result.offset.count());
+
+    // to 2006-04-01T19:25:04-08:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[19] = true;
+    sch.time.minute[25] = true;
+
+    TEST_ASSERT_FALSE(handle_today(*restore, 258, sch));
+    TEST_ASSERT_EQUAL(0, restore->results.size());
+
+    TEST_ASSERT_EQUAL(1, restore->pending.size());
+    TEST_ASSERT_EQUAL(258, restore->pending.back().index);
+
+    TEST_ASSERT(restore->next());
+    TEST_ASSERT(handle_pending(*restore, restore->pending.back()));
+
+    POP_BACK(result, restore->results);
+    TEST_ASSERT_EQUAL(258, result.index);
+    TEST_ASSERT_EQUAL(-488, result.offset.count());
+
+#undef POP_BACK
+}
+
 void test_event_impl() {
     static_assert(std::is_same_v<datetime::Clock::duration, datetime::Seconds>, "");
     const auto now = datetime::Clock::now();
@@ -699,65 +908,70 @@ void test_event_parsing() {
     TEST_ASSERT(((X).tm_min >= 0) && ((X).tm_min < 60))
 
 void test_expect_today() {
-    MAKE_TIMEPOINT(time_point);
-    const auto original_time_point = time_point;
+    auto ctx = datetime::make_context(ReferenceTimestamp);
 
-    scheduler::TimeMatch m;
-    m.hour.set(time_point.tm_hour - 1);
-    m.minute.set(time_point.tm_min - 1);
-    m.flags = scheduler::FlagUtc;
+    Schedule sch;
+    sch.time.hour.set(ctx.utc.tm_hour - 1);
+    sch.time.minute.set(ctx.utc.tm_min - 1);
+    sch.time.flags = scheduler::FlagUtc;
 
-    tm closest = time_point;
+    auto expect = expect::Context{ ctx };
 
-    TEST_TIME_POINT_BOUNDARIES(time_point);
-    TEST_ASSERT_FALSE(search::closest_future(closest, m, time_point));
+    TEST_ASSERT_FALSE(handle_today(expect, 123, sch));
 
     constexpr auto one_h = datetime::Hours(1);
-    m.hour.reset();
-    m.hour.set(time_point.tm_hour + one_h.count());
+    sch.time = TimeMatch{};
+    sch.time.flags = scheduler::FlagUtc;
+
+    sch.time.hour.set(
+        ctx.utc.tm_hour + one_h.count());
 
     constexpr auto twenty_six_m = datetime::Minutes(26);
-    m.minute.reset();
-    m.minute.set(time_point.tm_min + twenty_six_m.count());
+    sch.time.minute.set(
+        ctx.utc.tm_min + twenty_six_m.count());
 
-    closest = time_point;
+    TEST_ASSERT(handle_today(expect, 456, sch));
+    TEST_ASSERT_EQUAL(1, expect.results.size());
+    TEST_ASSERT_EQUAL(
+        (twenty_six_m + one_h).count(),
+        expect.results.back().offset.count());
 
-    TEST_ASSERT(search::closest_future(closest, m, time_point));
-    TEST_ASSERT_EQUAL(time_point.tm_hour + one_h.count(), closest.tm_hour);
-    TEST_ASSERT_EQUAL(time_point.tm_min + twenty_six_m.count(), closest.tm_min);
+    auto result = ReferenceTimestamp
+        + datetime::Seconds(expect.results.back().offset).count();
+
+    expect.results.clear();
+    expect.pending.clear();
+
+    tm out{};
+    gmtime_r(&result, &out);
+
+    TEST_ASSERT_EQUAL(ctx.utc.tm_hour + one_h.count(), out.tm_hour);
+    TEST_ASSERT_EQUAL(ctx.utc.tm_min + twenty_six_m.count(), out.tm_min);
+
+    sch.time = TimeMatch{};
+    sch.time.flags = scheduler::FlagUtc;
 
     constexpr auto nine_h = datetime::Hours(9);
-    m.hour.reset();
-    m.hour.set(time_point.tm_hour);
+    sch.time.hour.set(ctx.utc.tm_hour);
 
     constexpr auto thirty_m = datetime::Minutes(30);
-    m.minute.reset();
-    m.minute.set(time_point.tm_min);
+    sch.time.minute.set(ctx.utc.tm_min);
 
-    time_point.tm_hour -= nine_h.count();
-    time_point.tm_min += thirty_m.count();
-    TEST_TIME_POINT_BOUNDARIES(time_point);
+    const auto next = datetime::Seconds(ReferenceTimestamp) - nine_h + thirty_m;
+    ctx = datetime::make_context(next);
 
-    closest = time_point;
+    TEST_ASSERT(handle_today(expect, 791, sch));
+    TEST_ASSERT_EQUAL(1, expect.results.size());
+    TEST_ASSERT_EQUAL(
+        (nine_h - thirty_m).count(),
+        expect.results.back().offset.count());
 
-    TEST_ASSERT(search::closest_future(closest, m, time_point));
-    TEST_ASSERT_EQUAL(time_point.tm_hour + nine_h.count(), closest.tm_hour);
-    TEST_ASSERT_EQUAL(time_point.tm_min - thirty_m.count(), closest.tm_min);
+    result = (datetime::Seconds(ctx.timestamp)
+        + datetime::Seconds(expect.results.back().offset)).count();
+    gmtime_r(&result, &out);
 
-    time_point = original_time_point;
-    closest = time_point;
-
-    m.hour.reset();
-    m.hour.set(time_point.tm_hour);
-
-    m.minute.reset();
-    m.minute.set(time_point.tm_min + thirty_m.count());
-
-    TEST_TIME_POINT_BOUNDARIES(time_point);
-
-    TEST_ASSERT(search::closest_future(closest, m, time_point));
-    TEST_ASSERT_EQUAL(time_point.tm_hour, closest.tm_hour);
-    TEST_ASSERT_EQUAL(time_point.tm_min + thirty_m.count(), closest.tm_min);
+    TEST_ASSERT_EQUAL(ctx.utc.tm_hour + nine_h.count(), out.tm_hour);
+    TEST_ASSERT_EQUAL(ctx.utc.tm_min - thirty_m.count(), out.tm_min);
 }
 
 void test_expect_delta_future() {
@@ -791,6 +1005,168 @@ void test_expect_delta_future() {
     TEST_ASSERT_EQUAL(
         (one_d + thirty_one_m).count(),
         ctx.results[0].offset.count());
+}
+
+void test_expect_sdt_dst() {
+    WithTimezone _(":US/Pacific");
+
+    // at 2006-04-02T01:33:04-08:00 TZ='US/Pacific'
+    constexpr auto Timestamp = time_t{ 1143970384 };
+
+    auto ctx = datetime::make_context(Timestamp);
+
+    // to invalid 2006-04-02T02:23:04-08:00 TZ='US/Pacific'
+    Schedule sch;
+    sch.ok = true;
+    sch.time.hour[2] = true;
+    sch.time.minute[23] = true;
+
+#define POP_BACK(OUT, RESULTS)\
+    TEST_ASSERT_EQUAL(1, (RESULTS).size());\
+    OUT = (RESULTS).back();\
+    (RESULTS).pop_back()
+
+    Offset result;
+
+    auto expect = std::make_unique<expect::Context>(ctx);
+    TEST_ASSERT_FALSE(handle_today(*expect, 123, sch));
+    TEST_ASSERT_EQUAL(0, expect->results.size());
+    TEST_ASSERT_EQUAL(1, expect->pending.size());
+
+    TEST_ASSERT(expect->next_delta(datetime::Days{ 1 }));
+    TEST_ASSERT(handle_pending(*expect, expect->pending[0]));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(123, result.index);
+    TEST_ASSERT_EQUAL(
+        (datetime::Minutes(datetime::Days(1)) - datetime::Minutes(10)).count(),
+        result.offset.count());
+
+    // back to original state
+    expect = std::make_unique<expect::Context>(ctx);
+
+    // to 2006-04-02T04:56:04-07:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[4] = true;
+    sch.time.minute[56] = true;
+
+    TEST_ASSERT(handle_today(*expect, 246, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(246, result.index);
+    TEST_ASSERT_EQUAL(143, result.offset.count());
+
+    sch.time = TimeMatch{};
+
+    // to invalid 2006-04-02T02:59:04-08:00 TZ='US/Pacific'
+    sch.time.hour[2] = true;
+    sch.time.minute[59] = true;
+
+    // to 2006-04-02T03:33:04-08:00 TZ='US/Pacific'
+    // should exclude 02:33 & 02:59
+    sch.time.hour[3] = true;
+    sch.time.minute[33] = true;
+
+    TEST_ASSERT(handle_today(*expect, 357, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(357, result.index);
+    TEST_ASSERT_EQUAL(60, result.offset.count());
+
+#undef POP_BACK
+}
+
+void test_expect_dst_sdt() {
+    WithTimezone _(":US/Pacific");
+
+    // at 2006-10-29T00:33:04-07:00 TZ='US/Pacific'
+    constexpr auto Timestamp = time_t{ 1162107184 };
+
+    auto ctx = datetime::make_context(Timestamp);
+
+    // to 2006-10-29T01:22:04-07:00 TZ='US/Pacific'
+    Schedule sch;
+    sch.time.hour[1] = true;
+    sch.time.minute[22] = true;
+
+#define POP_BACK(OUT, RESULTS)\
+    TEST_ASSERT_EQUAL(1, (RESULTS).size());\
+    OUT = (RESULTS).back();\
+    (RESULTS).pop_back()
+
+    Offset result;
+
+    auto expect = std::make_unique<expect::Context>(ctx);
+    TEST_ASSERT(handle_today(*expect, 123, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(123, result.index);
+    TEST_ASSERT_EQUAL(49, result.offset.count());
+
+    // to 2006-10-29T01:00:04-07:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[1] = true;
+    sch.time.minute[0] = true;
+
+    TEST_ASSERT(handle_today(*expect, 456, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(456, result.index);
+    TEST_ASSERT_EQUAL(27, result.offset.count());
+
+    // at 2006-10-29T01:33:04-07:00 TZ='US/Pacific'
+    ctx = datetime::make_context(Timestamp + OneHour.count());
+    expect = std::make_unique<expect::Context>(ctx);
+
+    // to 2006-10-29T01:49:04-07:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[1] = true;
+    sch.time.minute[49] = true;
+
+    TEST_ASSERT(handle_today(*expect, 789, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(789, result.index);
+    TEST_ASSERT_EQUAL(16, result.offset.count());
+
+    // to 2006-10-29T01:19:04-08:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[1] = true;
+    sch.time.minute[19] = true;
+
+    TEST_ASSERT(handle_today(*expect, 111, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(111, result.index);
+    TEST_ASSERT_EQUAL(46, result.offset.count());
+
+    // at 2006-10-29T01:33:04-08:00 TZ='US/Pacific'
+    ctx = datetime::make_context(Timestamp + (OneHour + OneHour).count());
+    expect = std::make_unique<expect::Context>(ctx);
+
+    // to 2006-10-29T01:52:04-08:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[1] = true;
+    sch.time.minute[52] = true;
+
+    TEST_ASSERT(handle_today(*expect, 222, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(222, result.index);
+    TEST_ASSERT_EQUAL(19, result.offset.count());
+
+    // to 2006-10-29T02:21:04-08:00 TZ='US/Pacific'
+    sch.time = TimeMatch{};
+    sch.time.hour[2] = true;
+    sch.time.minute[21] = true;
+
+    TEST_ASSERT(handle_today(*expect, 333, sch));
+
+    POP_BACK(result, expect->results);
+    TEST_ASSERT_EQUAL(333, result.index);
+    TEST_ASSERT_EQUAL(48, result.offset.count());
+
+#undef POP_BACK
 }
 
 void test_schedule_invalid_parsing() {
@@ -1107,24 +1483,20 @@ int main(int, char**) {
     RUN_TEST(test_date_parsing_invalid);
     RUN_TEST(test_date_week_index);
     RUN_TEST(test_date_year);
-    RUN_TEST(test_keyword_impl);
-    RUN_TEST(test_keyword_parsing);
-    RUN_TEST(test_time_impl);
-    RUN_TEST(test_time_invalid_parsing);
-    RUN_TEST(test_time_parsing);
-    RUN_TEST(test_time_repeat);
-    RUN_TEST(test_weekday);
-    RUN_TEST(test_weekday_impl);
-    RUN_TEST(test_weekday_invalid_parsing);
-    RUN_TEST(test_weekday_offset);
-    RUN_TEST(test_weekday_parsing);
-    RUN_TEST(test_restore_today);
-    RUN_TEST(test_restore_delta_future);
-    RUN_TEST(test_restore_delta_past);
+    RUN_TEST(test_datetime_parsing);
     RUN_TEST(test_event_impl);
     RUN_TEST(test_event_parsing);
-    RUN_TEST(test_expect_today);
     RUN_TEST(test_expect_delta_future);
+    RUN_TEST(test_expect_dst_sdt);
+    RUN_TEST(test_expect_sdt_dst);
+    RUN_TEST(test_expect_today);
+    RUN_TEST(test_keyword_impl);
+    RUN_TEST(test_keyword_parsing);
+    RUN_TEST(test_restore_delta_future);
+    RUN_TEST(test_restore_delta_past);
+    RUN_TEST(test_restore_dst_sdt);
+    RUN_TEST(test_restore_sdt_dst);
+    RUN_TEST(test_restore_today);
     RUN_TEST(test_schedule_invalid_parsing);
     RUN_TEST(test_schedule_parsing_date);
     RUN_TEST(test_schedule_parsing_date_range);
@@ -1134,6 +1506,14 @@ int main(int, char**) {
     RUN_TEST(test_schedule_parsing_weekdays);
     RUN_TEST(test_schedule_parsing_weekdays_range);
     RUN_TEST(test_search_bits);
-    RUN_TEST(test_datetime_parsing);
+    RUN_TEST(test_time_impl);
+    RUN_TEST(test_time_invalid_parsing);
+    RUN_TEST(test_time_parsing);
+    RUN_TEST(test_time_repeat);
+    RUN_TEST(test_weekday);
+    RUN_TEST(test_weekday_impl);
+    RUN_TEST(test_weekday_invalid_parsing);
+    RUN_TEST(test_weekday_offset);
+    RUN_TEST(test_weekday_parsing);
     return UNITY_END();
 }
