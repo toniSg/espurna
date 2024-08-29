@@ -911,6 +911,7 @@ struct TimePoint {
     datetime::Seconds seconds{ -1 };
 };
 
+[[gnu::unused]]
 TimePoint make_time_point(datetime::Seconds seconds) {
     TimePoint out;
 
