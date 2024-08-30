@@ -50,6 +50,7 @@ jobs:
           --quiet \
           --recurse-paths \
           WebUI-${{ github.sha }}.zip build/
+        mv WebUI-${{ github.sha }}.zip ../../
         popd
     - uses: actions/upload-artifact@v4
       with:
