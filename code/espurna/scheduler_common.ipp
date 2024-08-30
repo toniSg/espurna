@@ -741,7 +741,7 @@ bool handle_impl(const SearchValidate& sv, Context& ctx, size_t index, const Sch
     }
 
     if (!sv.search(search, search.time_point)) {
-        if (is_valid(search.same_hour)) {
+        if (search.local && is_valid(search.same_hour)) {
             result_same_hour(search);
         } else {
             return false;
