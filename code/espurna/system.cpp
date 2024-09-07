@@ -742,6 +742,32 @@ void ReadyFlag::stop() {
     _ready = true;
 }
 
+constexpr auto PolledReadFlagHalfInterval =
+    duration::Milliseconds(std::numeric_limits<time::SystemClock::rep>::max() / 2);
+
+bool PolledReadyFlag::wait(duration::Milliseconds interval) {
+    if (_ready) {
+        _ready = false;
+        _until = time::SystemClock::now() + interval;
+        return true;
+    }
+
+    return false;
+}
+
+void PolledReadyFlag::stop() {
+    _ready = true;
+}
+
+bool PolledReadyFlag::ready() {
+    if (!_ready) {
+        const auto now = time::SystemClock::now();
+        _ready = (now >= _until) && ((now - _until) < PolledReadFlagHalfInterval);
+    }
+
+    return _ready;
+}
+
 namespace {
 
 namespace memory {
