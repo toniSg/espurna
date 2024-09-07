@@ -121,14 +121,38 @@ String serialize(mqtt::KeepAlive value) {
 } // namespace espurna
 
 namespace mqtt {
-namespace build {
+namespace reconnect {
 namespace {
 
-static constexpr espurna::duration::Milliseconds SkipTime { MQTT_SKIP_TIME };
+using espurna::duration::Seconds;
 
-static constexpr espurna::duration::Milliseconds ReconnectDelayMin { MQTT_RECONNECT_DELAY_MIN };
-static constexpr espurna::duration::Milliseconds ReconnectDelayMax { MQTT_RECONNECT_DELAY_MAX };
-static constexpr espurna::duration::Milliseconds ReconnectStep { MQTT_RECONNECT_DELAY_STEP };
+static constexpr std::array<espurna::duration::Seconds, 9> Delays {
+    Seconds(3),
+    Seconds(5),
+    Seconds(5),
+    Seconds(15),
+    Seconds(30),
+    Seconds(60),
+    Seconds(90),
+    Seconds(120),
+    Seconds(180),
+};
+
+constexpr Seconds delay(size_t index) {
+    return index < Delays.size()
+        ? Delays[index]
+        : Delays.back();
+}
+
+constexpr size_t next(size_t index) {
+    return std::clamp(index + 1, size_t{0}, Delays.size() - 1);
+}
+
+} // namespace
+} // namespace reconnect
+
+namespace build {
+namespace {
 
 static constexpr size_t MessageLogMax { 128ul };
 
@@ -428,14 +452,16 @@ void setup() {
 
 namespace {
 
-using MqttTimeSource = espurna::time::CoreClock;
-MqttTimeSource::time_point _mqtt_last_connection{};
-MqttTimeSource::duration _mqtt_skip_time { mqtt::build::SkipTime };
-MqttTimeSource::duration _mqtt_reconnect_delay { mqtt::build::ReconnectDelayMin };
+espurna::duration::Milliseconds _mqtt_skip_time;
+espurna::ReadyFlag _mqtt_skip_flag;
+
+espurna::PolledReadyFlag _mqtt_reconnect_flag;
+size_t _mqtt_reconnect_delay;
+
+bool _mqtt_enabled { mqtt::build::enabled() };
+bool _mqtt_network { false };
 
 AsyncClientState _mqtt_state { AsyncClientState::Disconnected };
-bool _mqtt_skip_messages { false };
-bool _mqtt_enabled { mqtt::build::enabled() };
 bool _mqtt_use_json { mqtt::build::json() };
 bool _mqtt_forward { false };
 
@@ -711,6 +737,9 @@ void _mqttMdnsStop();
 #endif
 
 void _mqttConfigure() {
+    // Reset reconnect delay to reconnect sooner
+    _mqtt_reconnect_flag.stop();
+    _mqtt_reconnect_delay = 0;
 
     // Make sure we have both the server to connect to things are enabled
     {
@@ -786,15 +815,13 @@ void _mqttConfigure() {
     // Heartbeat messages
     _mqttApplySetting(_mqtt_heartbeat_mode, mqtt::settings::heartbeatMode());
     _mqttApplySetting(_mqtt_heartbeat_interval, mqtt::settings::heartbeatInterval());
-    _mqtt_skip_time = mqtt::settings::skipTime();
 
     // Custom payload strings
     _mqtt_payload_online = mqtt::settings::payloadOnline();
     _mqtt_payload_offline = mqtt::settings::payloadOffline();
 
-    // Reset reconnect delay to reconnect sooner
-    _mqtt_reconnect_delay = mqtt::build::ReconnectDelayMin;
-
+    // Skip messages for the specified time after connecting
+    _mqtt_skip_time = mqtt::settings::skipTime();
 }
 
 #if MDNS_SERVER_SUPPORT
@@ -807,6 +834,7 @@ void _mqttMdnsStop() {
 }
 
 void _mqttMdnsDiscovery();
+
 void _mqttMdnsSchedule() {
     _mqtt_mdns_discovery.once(MqttMdnsDiscoveryInterval, _mqttMdnsDiscovery);
 }
@@ -814,12 +842,13 @@ void _mqttMdnsSchedule() {
 void _mqttMdnsDiscovery() {
     if (mdnsRunning()) {
         DEBUG_MSG_P(PSTR("[MQTT] Querying MDNS service _mqtt._tcp\n"));
-        auto found = mdnsServiceQuery("mqtt", "tcp", [](String&& server, uint16_t port) {
-            DEBUG_MSG_P(PSTR("[MQTT] MDNS found broker at %s:%hu\n"), server.c_str(), port);
-            setSetting("mqttServer", server);
-            setSetting("mqttPort", port);
-            return true;
-        });
+        auto found = mdnsServiceQuery("mqtt", "tcp",
+            [](String&& server, uint16_t port) {
+                DEBUG_MSG_P(PSTR("[MQTT] MDNS found broker at %s:%hu\n"), server.c_str(), port);
+                setSetting("mqttServer", server);
+                setSetting("mqttPort", port);
+                return true;
+            });
 
         if (found) {
             _mqttMdnsStop();
@@ -906,17 +935,8 @@ String _mqttClientInfo() {
 
 void _mqttInfo() {
     constexpr auto build = _mqttBuildInfo();
-    DEBUG_MSG_P(PSTR("[MQTT] %.*s\n"), build.length(), build.data());
-
-    const auto client = _mqttClientInfo();
-    DEBUG_MSG_P(PSTR("[MQTT] Client %.*s\n"), client.length(), client.c_str());
-
-    if (_mqtt_enabled && (_mqtt_state != AsyncClientState::Connected)) {
-        DEBUG_MSG_P(PSTR("[MQTT] Retrying, Last %u with Delay %u (Step %u)\n"),
-            _mqtt_last_connection.time_since_epoch().count(),
-            _mqtt_reconnect_delay.count(),
-            mqtt::build::ReconnectStep.count());
-    }
+    DEBUG_MSG_P(PSTR("[MQTT] Built with %.*s\n"),
+        build.length(), build.data());
 }
 
 } // namespace
@@ -1135,8 +1155,13 @@ bool _mqttHeartbeat(espurna::heartbeat::Mask mask) {
 }
 
 void _mqttOnConnect() {
-    _mqtt_reconnect_delay = mqtt::build::ReconnectDelayMin;
-    _mqtt_last_connection = MqttTimeSource::now();
+    _mqtt_reconnect_delay = 0;
+    _mqtt_reconnect_flag.stop();
+
+    if (_mqtt_skip_time > _mqtt_skip_time.zero()) {
+        _mqtt_skip_flag.wait(_mqtt_skip_time);
+    }
+
     _mqtt_state = AsyncClientState::Connected;
 
     systemHeartbeat(_mqttHeartbeat, _mqtt_heartbeat_mode, _mqtt_heartbeat_interval);
@@ -1149,6 +1174,19 @@ void _mqttOnConnect() {
     }
 
     DEBUG_MSG_P(PSTR("[MQTT] Connected!\n"));
+    if (_mqtt_skip_time > _mqtt_skip_time.zero()) {
+        DEBUG_MSG_P(PSTR("[MQTT] Would skip received messages for %u ms\n"), _mqtt_skip_time.count());
+    }
+}
+
+void _mqttScheduleConnect() {
+    _mqtt_reconnect_flag.wait(
+        mqtt::reconnect::delay(_mqtt_reconnect_delay));
+}
+
+void _mqttStopConnect() {
+    _mqtt_reconnect_flag.stop();
+    _mqtt_skip_flag.stop();
 }
 
 void _mqttOnDisconnect() {
@@ -1157,7 +1195,6 @@ void _mqttOnDisconnect() {
     _mqtt_subscribe_callbacks.clear();
 #endif
 
-    _mqtt_last_connection = MqttTimeSource::now();
     _mqtt_state = AsyncClientState::Disconnected;
 
     systemStopHeartbeat(_mqttHeartbeat);
@@ -1169,7 +1206,18 @@ void _mqttOnDisconnect() {
             espurna::StringView());
     }
 
+    if (_mqtt_enabled) {
+        _mqttScheduleConnect();
+    } else {
+        _mqttStopConnect();
+    }
+
     DEBUG_MSG_P(PSTR("[MQTT] Disconnected!\n"));
+
+    if (_mqtt_enabled && _mqtt_reconnect_delay > 0) {
+        DEBUG_MSG_P(PSTR("[MQTT] Retrying in %u seconds\n"),
+            mqtt::reconnect::delay(_mqtt_reconnect_delay).count());
+    }
 }
 
 #if MQTT_LIBRARY == MQTT_LIBRARY_ASYNCMQTTCLIENT
@@ -1201,12 +1249,11 @@ void _mqttPidCallback(MqttPidCallbacks& callbacks, uint16_t pid) {
 // Force-skip everything received in a short window right after connecting to avoid syncronization issues.
 
 bool _mqttMaybeSkipRetained(char* topic) {
-    if (_mqtt_skip_messages && (MqttTimeSource::now() - _mqtt_last_connection < _mqtt_skip_time)) {
+    if (!_mqtt_skip_flag) {
         DEBUG_MSG_P(PSTR("[MQTT] Received %s - SKIPPED\n"), topic);
         return true;
     }
 
-    _mqtt_skip_messages = false;
     return false;
 }
 
@@ -1654,22 +1701,19 @@ void _mqttConnect() {
     if (_mqtt.connected() || (_mqtt_state != AsyncClientState::Disconnected)) return;
 
     // Do not connect if disabled or no WiFi
-    if (!_mqtt_enabled || (!wifiConnected())) return;
+    if (!_mqtt_enabled || !_mqtt_network) return;
 
     // Check reconnect interval
-    if (MqttTimeSource::now() - _mqtt_last_connection < _mqtt_reconnect_delay) return;
+    if (!_mqtt_reconnect_flag) return;
 
-    // Increase the reconnect delay each attempt
-    _mqtt_reconnect_delay += mqtt::build::ReconnectStep;
-    _mqtt_reconnect_delay = std::clamp(_mqtt_reconnect_delay,
-            mqtt::build::ReconnectDelayMin, mqtt::build::ReconnectDelayMax);
-
-    DEBUG_MSG_P(PSTR("[MQTT] Connecting to broker at %s:%hu\n"),
-            _mqtt_settings.server.c_str(), _mqtt_settings.port);
+    // Increase reconnect delay each attempt
+    _mqtt_reconnect_delay =
+        mqtt::reconnect::next(_mqtt_reconnect_delay);
 
     _mqtt_state = AsyncClientState::Connecting;
 
-    _mqtt_skip_messages = (_mqtt_skip_time.count() > 0);
+    DEBUG_MSG_P(PSTR("[MQTT] Connecting to broker at %s:%hu\n"),
+            _mqtt_settings.server.c_str(), _mqtt_settings.port);
 
     #if SECURE_CLIENT != SECURE_CLIENT_NONE
         const bool secure = mqtt::settings::secure();
@@ -1810,6 +1854,18 @@ void mqttSetup() {
     #endif // MQTT_LIBRARY == MQTT_LIBRARY_ASYNCMQTTCLIENT
 
     _mqttConfigure();
+
+    wifiRegister(
+        [](espurna::wifi::Event event) {
+            if (event == espurna::wifi::Event::StationConnected) {
+                _mqttScheduleConnect();
+                _mqtt_network = true;
+            } else if (event == espurna::wifi::Event::StationDisconnected) {
+                _mqttStopConnect();
+                _mqtt_network = false;
+            }
+        });
+
     mqttRegister(_mqttCallback);
 
     #if WEB_SUPPORT

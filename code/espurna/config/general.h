@@ -1036,21 +1036,8 @@
 #endif
 
 #ifndef MQTT_KEEPALIVE
-#define MQTT_KEEPALIVE              120             // MQTT keepalive value
+#define MQTT_KEEPALIVE              120             // MQTT keep-alive interval (in seconds). 2 minutes by default. Cannot be zero.
 #endif
-
-#ifndef MQTT_RECONNECT_DELAY_MIN
-#define MQTT_RECONNECT_DELAY_MIN    5000            // Try to reconnect in 5 seconds upon disconnection
-#endif
-
-#ifndef MQTT_RECONNECT_DELAY_STEP
-#define MQTT_RECONNECT_DELAY_STEP   5000            // Increase the reconnect delay in 5 seconds after each failed attempt
-#endif
-
-#ifndef MQTT_RECONNECT_DELAY_MAX
-#define MQTT_RECONNECT_DELAY_MAX    120000          // Set reconnect time to 2 minutes at most
-#endif
-
 
 #ifndef MQTT_SKIP_TIME
 #define MQTT_SKIP_TIME              0               // Skip messages for N ms after connection. Disabled by default
