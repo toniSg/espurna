@@ -1060,7 +1060,7 @@
                                                     // Note: When using MQTT_LIBRARY_PUBSUBCLIENT, MQTT_MAX_PACKET_SIZE should not be more than this value.
 #endif
 
-// These are the properties that will be sent when useJson is true
+// These are the properties that will be sent when MQTT_USE_JSON is enabled
 #ifndef MQTT_ENQUEUE_IP
 #define MQTT_ENQUEUE_IP             1
 #endif
@@ -1082,24 +1082,31 @@
 #endif
 
 #ifndef MQTT_STATUS_ONLINE
-#define MQTT_STATUS_ONLINE          "1"         // Value for the device ON message
+#define MQTT_STATUS_ONLINE          "1"         // Publish this value to the 'status' topic (aka Will topic) when device is ONLINE.
+                                                // Device publishes this value when connected to the broker, and with a periodic heartbeat messages.
 #endif
 
 #ifndef MQTT_STATUS_OFFLINE
-#define MQTT_STATUS_OFFLINE         "0"         // Value for the device OFF message (will)
+#define MQTT_STATUS_OFFLINE         "0"         // Publish this value to the 'status' topic (aka Will topic) when device is OFFLINE
+                                                // Broker would publish this message when device disconnects from it.
 #endif
 
-#define MQTT_ACTION_RESET           "reboot"    // RESET MQTT topic particle
+#ifndef MQTT_STATUS_RETAIN
+#define MQTT_STATUS_RETAIN          MQTT_RETAIN // Sets 'status' (aka Will) message RETAIN flag.
+#endif
 
-// Custom get and set postfixes
-// Use something like "/status" or "/set", with leading slash
-// Since 1.9.0 the default value is "" for getter and "/set" for setter
+#ifndef MQTT_STATUS_QOS
+#define MQTT_STATUS_QOS             MQTT_QOS    // Sets 'status' (aka Will) message QoS.
+#endif
+
 #ifndef MQTT_GETTER
-#define MQTT_GETTER                 ""
+#define MQTT_GETTER                 ""          // Use this string postfix when publishing messages from the device
+                                                // When not empty, **MUST** start with a slash.
 #endif
 
 #ifndef MQTT_SETTER
-#define MQTT_SETTER                 "/set"
+#define MQTT_SETTER                 "/set"      // Use this string postfix when subscribing to topics
+                                                // When not empty, **MUST** start with a slash.
 #endif
 
 // -----------------------------------------------------------------------------
