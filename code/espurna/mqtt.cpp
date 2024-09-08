@@ -243,40 +243,40 @@ STRING_VIEW_INLINE(Prefix, "mqtt");
 namespace keys {
 namespace {
 
-PROGMEM_STRING(Server, "mqttServer");
-PROGMEM_STRING(Port, "mqttPort");
+STRING_VIEW_INLINE(Server, "mqttServer");
+STRING_VIEW_INLINE(Port, "mqttPort");
 
-PROGMEM_STRING(Enabled, "mqttEnabled");
-PROGMEM_STRING(Autoconnect, "mqttAutoconnect");
+STRING_VIEW_INLINE(Enabled, "mqttEnabled");
+STRING_VIEW_INLINE(Autoconnect, "mqttAutoconnect");
 
-PROGMEM_STRING(Topic, "mqttTopic");
-PROGMEM_STRING(Getter, "mqttGetter");
-PROGMEM_STRING(Setter, "mqttSetter");
+STRING_VIEW_INLINE(Topic, "mqttTopic");
+STRING_VIEW_INLINE(Getter, "mqttGetter");
+STRING_VIEW_INLINE(Setter, "mqttSetter");
 
-PROGMEM_STRING(User, "mqttUser");
-PROGMEM_STRING(Password, "mqttPassword");
-PROGMEM_STRING(QoS, "mqttQoS");
-PROGMEM_STRING(Retain, "mqttRetain");
-PROGMEM_STRING(Keepalive, "mqttKeep");
-PROGMEM_STRING(ClientId, "mqttClientID");
-PROGMEM_STRING(TopicWill, "mqttWill");
-PROGMEM_STRING(WillQoS, "mqttWillQoS");
-PROGMEM_STRING(WillRetain, "mqttWillRetain");
+STRING_VIEW_INLINE(User, "mqttUser");
+STRING_VIEW_INLINE(Password, "mqttPassword");
+STRING_VIEW_INLINE(QoS, "mqttQoS");
+STRING_VIEW_INLINE(Retain, "mqttRetain");
+STRING_VIEW_INLINE(Keepalive, "mqttKeep");
+STRING_VIEW_INLINE(ClientId, "mqttClientID");
+STRING_VIEW_INLINE(TopicWill, "mqttWill");
+STRING_VIEW_INLINE(WillQoS, "mqttWillQoS");
+STRING_VIEW_INLINE(WillRetain, "mqttWillRetain");
 
-PROGMEM_STRING(UseJson, "mqttUseJson");
-PROGMEM_STRING(TopicJson, "mqttJson");
+STRING_VIEW_INLINE(UseJson, "mqttUseJson");
+STRING_VIEW_INLINE(TopicJson, "mqttJson");
 
-PROGMEM_STRING(HeartbeatMode, "mqttHbMode");
-PROGMEM_STRING(HeartbeatInterval, "mqttHbIntvl");
-PROGMEM_STRING(SkipTime, "mqttSkipTime");
+STRING_VIEW_INLINE(HeartbeatMode, "mqttHbMode");
+STRING_VIEW_INLINE(HeartbeatInterval, "mqttHbIntvl");
+STRING_VIEW_INLINE(SkipTime, "mqttSkipTime");
 
-PROGMEM_STRING(PayloadOnline, "mqttPayloadOnline");
-PROGMEM_STRING(PayloadOffline, "mqttPayloadOffline");
+STRING_VIEW_INLINE(PayloadOnline, "mqttPayloadOnline");
+STRING_VIEW_INLINE(PayloadOffline, "mqttPayloadOffline");
 
-PROGMEM_STRING(Secure, "mqttUseSSL");
-PROGMEM_STRING(Fingerprint, "mqttFP");
-PROGMEM_STRING(SecureClientCheck, "mqttScCheck");
-PROGMEM_STRING(SecureClientMfln, "mqttScMFLN");
+STRING_VIEW_INLINE(Secure, "mqttUseSSL");
+STRING_VIEW_INLINE(Fingerprint, "mqttFP");
+STRING_VIEW_INLINE(SecureClientCheck, "mqttScCheck");
+STRING_VIEW_INLINE(SecureClientMfln, "mqttScMFLN");
 
 } // namespace
 } // namespace keys
@@ -1105,6 +1105,8 @@ void _mqttInfo() {
 
 namespace {
 
+STRING_VIEW_INLINE(Status, "mqttStatus");
+
 #if WEB_SUPPORT
 
 bool _mqttWebSocketOnKeyCheck(espurna::StringView key, const JsonVariant&) {
@@ -1119,40 +1121,40 @@ void _mqttWebSocketOnVisible(JsonObject& root) {
 }
 
 void _mqttWebSocketOnData(JsonObject& root) {
-    root[F("mqttStatus")] = mqttConnected();
+    root[Status] = mqttConnected();
 }
 
 void _mqttWebSocketOnConnected(JsonObject& root) {
     using namespace mqtt::settings::keys;
     using mqtt::settings::keys::Server;
 
-    root[FPSTR(Enabled)] = mqttEnabled();
+    root[Enabled] = mqttEnabled();
 
-    root[FPSTR(Server)] = mqtt::settings::server();
-    root[FPSTR(Port)] = mqtt::settings::port();
+    root[Server] = mqtt::settings::server();
+    root[Port] = mqtt::settings::port();
 
-    root[FPSTR(TopicWill)] = mqtt::settings::topicWill();
-    root[FPSTR(WillQoS)] = mqtt::settings::willQoS();
-    root[FPSTR(WillRetain)] = mqtt::settings::willRetain();
+    root[TopicWill] = mqtt::settings::topicWill();
+    root[WillQoS] = mqtt::settings::willQoS();
+    root[WillRetain] = mqtt::settings::willRetain();
 
-    root[FPSTR(PayloadOnline)] = mqtt::settings::payloadOnline();
-    root[FPSTR(PayloadOffline)] = mqtt::settings::payloadOffline();
+    root[PayloadOnline] = mqtt::settings::payloadOnline();
+    root[PayloadOffline] = mqtt::settings::payloadOffline();
 
-    root[FPSTR(QoS)] = mqtt::settings::qos();
-    root[FPSTR(Retain)] = mqtt::settings::retain();
-    root[FPSTR(ClientId)] = mqtt::settings::clientId();
-    root[FPSTR(Keepalive)] = mqtt::settings::keepalive().count();
+    root[QoS] = mqtt::settings::qos();
+    root[Retain] = mqtt::settings::retain();
+    root[ClientId] = mqtt::settings::clientId();
+    root[Keepalive] = mqtt::settings::keepalive().count();
 
-    root[FPSTR(User)] = mqtt::settings::user();
-    root[FPSTR(Password)] = mqtt::settings::password();
+    root[User] = mqtt::settings::user();
+    root[Password] = mqtt::settings::password();
 
-    root[FPSTR(Topic)] = mqtt::settings::topic();
-    root[FPSTR(UseJson)] = mqtt::settings::json();
-    root[FPSTR(TopicJson)] = mqtt::settings::topicJson();
+    root[Topic] = mqtt::settings::topic();
+    root[UseJson] = mqtt::settings::json();
+    root[TopicJson] = mqtt::settings::topicJson();
 
 #if SECURE_CLIENT != SECURE_CLIENT_NONE
-    root[FPSTR(Secure)] = mqtt::settings::secure();
-    root[FPSTR(Fingerprint)] = mqtt::settings::fingerprint();
+    root[Secure] = mqtt::settings::secure();
+    root[Fingerprint] = mqtt::settings::fingerprint();
 #endif
 }
 
