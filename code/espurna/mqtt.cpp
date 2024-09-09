@@ -984,13 +984,15 @@ void _mqttMdnsStop() {
 void _mqttMdnsDiscovery();
 
 void _mqttMdnsSchedule() {
-    _mqtt_mdns_discovery.once(MqttMdnsDiscoveryInterval, _mqttMdnsDiscovery);
+    _mqtt_mdns_discovery.schedule_once(MqttMdnsDiscoveryInterval, _mqttMdnsDiscovery);
 }
 
 void _mqttMdnsDiscovery() {
     if (mdnsRunning()) {
         DEBUG_MSG_P(PSTR("[MQTT] Querying MDNS service _mqtt._tcp\n"));
-        auto found = mdnsServiceQuery("mqtt", "tcp",
+        auto found = mdnsServiceQuery(
+            STRING_VIEW("mqtt").toString(),
+            STRING_VIEW("tcp").toString(),
             [](String&& server, uint16_t port) {
                 DEBUG_MSG_P(PSTR("[MQTT] MDNS found broker at %s:%hu\n"), server.c_str(), port);
                 setSetting(mqtt::settings::keys::Server, server);
