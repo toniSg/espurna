@@ -1593,7 +1593,7 @@ void _mqttOnDisconnect() {
             espurna::StringView());
     }
 
-    const auto connect = _mqtt_enabled && _mqtt_error;
+    const auto connect = _mqtt_enabled && !_mqtt_error;
 
     if (connect) {
         _mqttScheduleConnect();
