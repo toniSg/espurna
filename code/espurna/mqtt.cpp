@@ -578,7 +578,9 @@ struct MqttConfigureError {
         return _err;
     }
 
-    constexpr bool operator==(const MqttConfigureError&) const = default;
+    constexpr bool operator==(const MqttConfigureError& other) const {
+        return _err == other._err;
+    }
 
     MqttConfigureError(const MqttConfigureError&) = default;
     MqttConfigureError& operator=(const MqttConfigureError&) = default;
