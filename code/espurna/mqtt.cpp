@@ -1700,25 +1700,27 @@ void _mqttOnMessageAsync(char* raw_topic, char* raw_payload, AsyncMqttClientMess
 
 #else
 
-// Sync client already implements buffering, but we still need to add '\0' because API consumer expects C-String :/
-// TODO: consider reworking this (and async counterpart), giving callback func length of the message.
+// Sync client already implements buffering. Also assuming it modifies topic to include '\0', otherwise 'topic' conversion into StringView would not work properly.
 
-void _mqttOnMessage(char* topic, char* payload, unsigned int len) {
-
-    if (!len || (len > MQTT_BUFFER_MAX_SIZE)) return;
+void _mqttOnMessage(char* raw_topic, char* raw_payload, unsigned int len) {
+    auto topic = espurna::StringView{ raw_topic };
     if (_mqttMaybeSkipRetained(topic)) return;
 
-    static char message[((MQTT_BUFFER_MAX_SIZE + 1) + 31) & -32] = {0};
-    memmove(message, (char *) payload, len);
-    message[len] = '\0';
+    auto message = espurna::StringView{ payload, len };
 
-    DEBUG_MSG_P(PSTR("[MQTT] Received %s => %s\n"), topic, message);
+    if (len < mqtt::build::MessageLogMax) {
+        DEBUG_MSG_P(PSTR("[MQTT] Received %.*s => %.*s\n"),
+            topic.length(), topic.data(),
+            message.length(), message.data());
+    } else {
+        DEBUG_MSG_P(PSTR("[MQTT] Received %.*s => (%u bytes)\n"),
+            topic.length(), topic.data(), len);
+    }
 
     // Call subscribers with the message buffer
     for (auto& callback : _mqtt_callbacks) {
         callback(MQTT_MESSAGE_EVENT, topic, message);
     }
-
 }
 
 #endif // MQTT_LIBRARY == MQTT_LIBRARY_ASYNCMQTTCLIENT
