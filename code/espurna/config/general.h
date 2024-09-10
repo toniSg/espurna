@@ -1043,16 +1043,16 @@
 #define MQTT_SKIP_TIME              0               // Skip messages for N ms after connection. Disabled by default
 #endif
 
-#ifndef MQTT_USE_JSON
-#define MQTT_USE_JSON               0               // Don't group messages in a JSON body by default
+#ifndef MQTT_JSON
+#define MQTT_JSON                   0               // Don't group messages in a JSON body by default
 #endif
 
-#ifndef MQTT_USE_JSON_DELAY
-#define MQTT_USE_JSON_DELAY         100             // Wait this many ms before grouping messages
+#ifndef MQTT_JSON_DELAY
+#define MQTT_JSON_DELAY             100             // Wait this many ms before grouping messages
 #endif
 
 #ifndef MQTT_QUEUE_MAX_SIZE
-#define MQTT_QUEUE_MAX_SIZE         20              // Size of the MQTT queue when MQTT_USE_JSON is enabled
+#define MQTT_QUEUE_MAX_SIZE         20              // Size of the MQTT queue when MQTT_JSON is enabled
 #endif
 
 #ifndef MQTT_BUFFER_MAX_SIZE
@@ -1060,7 +1060,7 @@
                                                     // Note: When using MQTT_LIBRARY_PUBSUBCLIENT, MQTT_MAX_PACKET_SIZE should not be more than this value.
 #endif
 
-// These are the properties that will be sent when MQTT_USE_JSON is enabled
+// These are the properties that will be sent when MQTT_JSON is enabled
 #ifndef MQTT_ENQUEUE_IP
 #define MQTT_ENQUEUE_IP             1
 #endif

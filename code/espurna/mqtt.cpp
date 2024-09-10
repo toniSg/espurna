@@ -206,10 +206,10 @@ constexpr bool willRetain() {
 }
 
 constexpr bool json() {
-    return 1 == MQTT_USE_JSON;
+    return 1 == MQTT_JSON;
 }
 
-static constexpr auto JsonDelay = espurna::duration::Milliseconds(MQTT_USE_JSON_DELAY);
+static constexpr auto JsonDelay = espurna::duration::Milliseconds(MQTT_JSON_DELAY);
 STRING_VIEW_INLINE(TopicJson, MQTT_TOPIC_JSON);
 
 constexpr espurna::duration::Milliseconds skipTime() {
@@ -263,7 +263,7 @@ STRING_VIEW_INLINE(TopicWill, "mqttWill");
 STRING_VIEW_INLINE(WillQoS, "mqttWillQoS");
 STRING_VIEW_INLINE(WillRetain, "mqttWillRetain");
 
-STRING_VIEW_INLINE(UseJson, "mqttUseJson");
+STRING_VIEW_INLINE(Json, "mqttJsonEnabled");
 STRING_VIEW_INLINE(TopicJson, "mqttJson");
 
 STRING_VIEW_INLINE(HeartbeatMode, "mqttHbMode");
@@ -350,7 +350,7 @@ bool willRetain() {
 }
 
 bool json() {
-    return getSetting(keys::UseJson, build::json());
+    return getSetting(keys::Json, build::json());
 }
 
 String topicJson() {
@@ -446,7 +446,7 @@ static constexpr espurna::settings::query::Setting Settings[] PROGMEM {
     {keys::Topic, settings::topic},
     {keys::TopicJson, settings::topicJson},
     {keys::TopicWill, settings::topicWill},
-    {keys::UseJson, internal::json},
+    {keys::Json, internal::json},
     {keys::User, settings::user},
     {keys::WillQoS, internal::willQoS},
     {keys::WillRetain, internal::willRetain},
@@ -1038,6 +1038,12 @@ void _mqttSettingsMigrate(int version) {
         delSetting(mqtt::settings::keys::TopicWill);
         delSetting(mqtt::settings::keys::TopicJson);
     }
+
+    if (version < 17) {
+        moveSetting(
+            STRING_VIEW("mqttUseJson").toString(),
+            mqtt::settings::keys::Json.toString());
+    }
 }
 
 #define __MQTT_INFO_STR(X) #X
@@ -1161,7 +1167,7 @@ void _mqttWebSocketOnConnected(JsonObject& root) {
     root[Password] = mqtt::settings::password();
 
     root[Topic] = mqtt::settings::topic();
-    root[UseJson] = mqtt::settings::json();
+    root[Json] = mqtt::settings::json();
     root[TopicJson] = mqtt::settings::topicJson();
 
 #if SECURE_CLIENT != SECURE_CLIENT_NONE
