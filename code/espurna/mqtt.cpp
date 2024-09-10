@@ -666,7 +666,9 @@ namespace {
 
 struct MqttPayload {
     MqttPayload() = delete;
+
     MqttPayload(const MqttPayload&) = default;
+    MqttPayload& operator=(const MqttPayload&) = default;
 
     // TODO: replace String implementation with Core v3 (or just use newer Core)
     //       2.7.x still has basic Arduino String move ctor that is not noexcept
@@ -674,6 +676,12 @@ struct MqttPayload {
         _topic(std::move(other._topic)),
         _message(std::move(other._message))
     {}
+
+    MqttPayload& operator=(MqttPayload&& other) noexcept {
+        _topic = std::move(other._topic);
+        _message = std::move(other._message);
+        return *this;
+    }
 
     template <typename Topic, typename Message>
     MqttPayload(Topic&& topic, Message&& message) :
@@ -687,6 +695,16 @@ struct MqttPayload {
 
     const String& message() const {
         return _message;
+    }
+
+    MqttPayload& operator=(const String& other) {
+        _message = other;
+        return *this;
+    }
+
+    MqttPayload& operator=(String&& other) noexcept {
+        _message = std::move(other);
+        return *this;
     }
 
 private:
@@ -890,6 +908,7 @@ void _mqttConfigure() {
         _mqttApplySetting(_mqtt_settings.port, mqtt::settings::port());
         _mqttApplySetting(_mqtt_enabled, mqtt::settings::enabled());
 
+        // Optionally, support dynamic server configuration through MDNS
 #if MDNS_SERVER_SUPPORT
         if (!_mqtt_enabled) {
             _mqttMdnsStop();
@@ -962,7 +981,7 @@ void _mqttConfigure() {
     _mqttApplySetting(_mqtt_settings.keepalive,
         mqtt::settings::keepalive());
 
-    // Heartbeat messages
+    // Heartbeat messages that are supposed to be published when connected
     _mqttApplySetting(_mqtt_heartbeat_mode,
         mqtt::settings::heartbeatMode());
     _mqttApplySetting(_mqtt_heartbeat_interval,
@@ -1139,8 +1158,8 @@ void _mqttWebSocketOnConnected(JsonObject& root) {
     root[WillQoS] = mqtt::settings::willQoS();
     root[WillRetain] = mqtt::settings::willRetain();
 
-    root[PayloadOnline] = mqtt::settings::payloadOnline();
     root[PayloadOffline] = mqtt::settings::payloadOffline();
+    root[PayloadOnline] = mqtt::settings::payloadOnline();
 
     root[QoS] = mqtt::settings::qos();
     root[Retain] = mqtt::settings::retain();
@@ -1742,14 +1761,20 @@ void mqttEnqueue(espurna::StringView topic, espurna::StringView payload) {
             mqttFlush();
         }
 
-        _mqtt_json_payload.remove_if(
+        const auto it = std::find_if(
+            _mqtt_json_payload.begin(),
+            _mqtt_json_payload.end(),
             [topic](const MqttPayload& payload) {
                 return topic == payload.topic();
             });
 
-        _mqtt_json_payload.emplace_front(
-            topic.toString(), payload.toString());
-        ++_mqtt_json_payload_count;
+        if (it != _mqtt_json_payload.end()) {
+            (*it) = payload.toString();
+        } else {
+            _mqtt_json_payload.emplace_front(
+                topic.toString(), payload.toString());
+            ++_mqtt_json_payload_count;
+        }
     }
 }
 
