@@ -1109,6 +1109,11 @@
                                                 // When not empty, **MUST** start with a slash.
 #endif
 
+#ifndef MQTT_SETTINGS
+#define MQTT_SETTINGS               0           // Subscribe to a topic that would be able to update
+                                                // the internal settigns storage kv pairs
+#endif
+
 // -----------------------------------------------------------------------------
 // SETTINGS
 // -----------------------------------------------------------------------------

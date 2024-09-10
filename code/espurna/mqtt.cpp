@@ -25,6 +25,8 @@ Updated secure client support by Niek van der Maas < mail at niekvandermaas dot 
 #include "libs/AsyncClientHelpers.h"
 #include "libs/SecureClientHelpers.h"
 
+#include "mqtt_common.ipp"
+
 #if MQTT_LIBRARY == MQTT_LIBRARY_ASYNCMQTTCLIENT
 #include <ESPAsyncTCP.h>
 #include <AsyncMqttClient.h>
@@ -239,6 +241,12 @@ constexpr uint16_t mfln() {
     return MQTT_SECURE_CLIENT_MFLN;
 }
 
+constexpr bool settings() {
+    return 1 == MQTT_SETTINGS;
+}
+
+STRING_VIEW_INLINE(TopicSettings, MQTT_TOPIC_SETTINGS "/+");
+
 } // namespace
 } // namespace build
 
@@ -283,6 +291,9 @@ STRING_VIEW_INLINE(Secure, "mqttUseSSL");
 STRING_VIEW_INLINE(Fingerprint, "mqttFP");
 STRING_VIEW_INLINE(SecureClientCheck, "mqttScCheck");
 STRING_VIEW_INLINE(SecureClientMfln, "mqttScMFLN");
+
+STRING_VIEW_INLINE(Settings, "mqttSettingsEnabled");
+STRING_VIEW_INLINE(TopicSettings, "mqttSettings");
 
 } // namespace
 } // namespace keys
@@ -383,6 +394,14 @@ String payloadOffline() {
     return getSetting(keys::PayloadOffline, espurna::StringView(build::PayloadOffline));
 }
 
+bool settings() {
+    return getSetting(keys::Settings, build::settings());
+}
+
+String topicSettings() {
+    return getSetting(keys::TopicSettings);
+}
+
 [[gnu::unused]]
 bool secure() {
     return getSetting(keys::Secure, build::secure());
@@ -427,6 +446,7 @@ EXACT_VALUE(willQoS, settings::willQoS)
 EXACT_VALUE(willRetain, settings::willRetain)
 EXACT_VALUE(retain, settings::retain)
 EXACT_VALUE(skipTime, settings::skipTime)
+EXACT_VALUE(settings, settings::settings)
 
 #undef EXACT_VALUE
 
@@ -450,6 +470,8 @@ static constexpr espurna::settings::query::Setting Settings[] PROGMEM {
     {keys::Topic, settings::topic},
     {keys::Json, internal::json},
     {keys::TopicJson, settings::topicJson},
+    {keys::Settings, internal::settings},
+    {keys::TopicSettings, settings::topicSettings},
     {keys::SkipTime, internal::skipTime},
     {keys::HeartbeatInterval, internal::heartbeatInterval},
     {keys::HeartbeatMode, internal::heartbeatMode},
@@ -508,12 +530,16 @@ private:
     Pairs _pairs;
 };
 
+STRING_VIEW_INLINE(Wildcard, "#");
+STRING_VIEW_INLINE(TrailingWildcard, "/#");
+constexpr const char WildcardCharacter = '#';
+
 Placeholders make_placeholders() {
     return Placeholders({
         {STRING_VIEW("{mac}"), systemChipId().toString()},
         {STRING_VIEW("{chipid}"), systemShortChipId().toString()},
         {STRING_VIEW("{hostname}"), systemHostname()},
-        {STRING_VIEW("{magnitude}"), STRING_VIEW("#").toString()},
+        {STRING_VIEW("{magnitude}"), Wildcard.toString()},
     });
 }
 
@@ -528,6 +554,9 @@ bool _mqtt_network { false };
 
 AsyncClientState _mqtt_state { AsyncClientState::Disconnected };
 bool _mqtt_forward { false };
+
+bool _mqtt_subscribe_settings { false };
+String _mqtt_settings_topic;
 
 String _mqtt_setter;
 String _mqtt_getter;
@@ -580,6 +609,7 @@ MQTT_ERROR_INLINE(ErrJson, "Invalid json topic");
 MQTT_ERROR_INLINE(ErrRoot, "Invalid root topic");
 MQTT_ERROR_INLINE(ErrServer, "No server configured");
 MQTT_ERROR_INLINE(ErrSetter, "Invalid topic setter");
+MQTT_ERROR_INLINE(ErrSettings, "Invalid settings topic");
 MQTT_ERROR_INLINE(ErrWill, "Invalid will topic");
 
 #if MDNS_SERVER_SUPPORT
@@ -625,40 +655,13 @@ void _mqttApplySetting(Lhs& lhs, Rhs&& rhs) {
     }
 }
 
-// Can't have **any** MQTT placeholders but our own `{magnitude}`
-bool _mqttValidTopicString(espurna::StringView value) {
-    if (!value.length()) {
+bool _mqttApplyValidSuffixString(String& lhs, String&& rhs) {
+    if (!espurna::mqtt::is_valid_suffix(rhs)) {
         return false;
     }
 
-    size_t hash = 0;
-    size_t plus = 0;
-    for (auto it = value.begin(); it != value.end(); ++it) {
-        switch (*it) {
-        case '#':
-            ++hash;
-            break;
-        case '+':
-            ++plus;
-            break;
-        }
-    }
-
-    return (hash <= 1) && (plus == 0);
-}
-
-bool _mqttValidSuffix(espurna::StringView value) {
-    return value.length() == 0
-        || value[0] == '/';
-}
-
-bool _mqttApplyValidSuffixString(String& lhs, String&& rhs) {
-    if (_mqttValidSuffix(rhs)) {
-        _mqttApplySetting(lhs, std::move(rhs));
-        return true;
-    }
-
-    return false;
+    _mqttApplySetting(lhs, std::move(rhs));
+    return true;
 }
 
 void _mqttApplySuffix(String getter, String setter) {
@@ -671,8 +674,8 @@ void _mqttApplySuffix(String getter, String setter) {
     }
 }
 
-void _mqttApplyTopic(String topic) {
-    if (!_mqttValidTopicString(topic)) {
+void _mqttApplyRootTopic(String topic) {
+    if (!topic.length() || !espurna::mqtt::is_valid_root_topic(topic)) {
         _mqtt_error = ErrRoot;
         return;
     }
@@ -684,10 +687,10 @@ void _mqttApplyTopic(String topic) {
             topic.remove(last);
         }
 
-        // For simple topics, assume right-hand side contains magnitude
+        // For simple topics, assume right-hand side contains the magnitude
         const auto hash = std::count(topic.begin(), topic.end(), '#');
         if (hash == 0) {
-            topic += STRING_VIEW("/#").toString();
+            topic += TrailingWildcard.toString();
         } else if (hash > 1) {
             _mqtt_error = ErrRoot;
             return;
@@ -698,7 +701,7 @@ void _mqttApplyTopic(String topic) {
 }
 
 void _mqttApplyWill(String topic) {
-    if (!_mqttValidTopicString(topic)) {
+    if (!espurna::mqtt::is_valid_topic(topic)) {
         _mqtt_error = ErrWill;
     }
 
@@ -715,6 +718,60 @@ void _mqttApplyWill(String topic) {
     _mqttApplySetting(
         _mqtt_payload_offline,
         mqtt::settings::payloadOffline());
+}
+
+// Creates a proper MQTT topic for the given 'magnitude'
+static String _mqttTopicWith(const String& topic, String magnitude, const String& suffix, const String& wildcard) {
+    String out;
+    out.reserve(magnitude.length()
+        + topic.length()
+        + suffix.length());
+
+    out += topic;
+    out += suffix;
+
+    out.replace(wildcard, magnitude);
+
+    return out;
+}
+
+static String _mqttTopicFilter() {
+    return _mqtt_settings.topic + _mqtt_setter;
+}
+
+// When magnitude is a status topic aka getter
+static String _mqttTopicGetter(const String& topic, String magnitude) {
+    return _mqttTopicWith(topic, std::move(magnitude), _mqtt_getter, Wildcard.toString());
+}
+
+static String _mqttTopicGetter(String magnitude) {
+    return _mqttTopicGetter(_mqtt_settings.topic, std::move(magnitude));
+}
+
+// When magnitude is an input topic aka setter
+static String _mqttTopicSetter(const String& topic, String magnitude) {
+    return _mqttTopicWith(topic, std::move(magnitude), _mqtt_setter, Wildcard.toString());
+}
+
+static String _mqttTopicSetter(String magnitude) {
+    return _mqttTopicSetter(_mqtt_settings.topic, std::move(magnitude));
+}
+
+// When magnitude is indexed, append its index to the topic
+static String _mqttTopicIndexed(String topic, size_t index) {
+    return topic + '/' + String(index, 10);
+}
+
+void _mqttApplySettingsTopic(String topic) {
+    if (!espurna::mqtt::is_valid_topic_filter(topic)
+      || espurna::mqtt::filter_wildcard(topic) != '+') {
+        _mqtt_error = ErrSettings;
+    }
+
+    _mqttApplySetting(_mqtt_subscribe_settings,
+        mqtt::settings::settings());
+    _mqttApplySetting(_mqtt_settings_topic,
+        std::move(topic));
 }
 
 } // namespace
@@ -781,7 +838,7 @@ bool _mqtt_json_enabled { mqtt::build::json() };
 String _mqtt_json_topic;
 
 void _mqttApplyJson(String topic) {
-    if (!_mqttValidTopicString(topic)) {
+    if (!espurna::mqtt::is_valid_topic(topic)) {
         _mqtt_error = ErrJson;
     }
 
@@ -1049,7 +1106,7 @@ void _mqttConfigure() {
     auto placeholders = make_placeholders();
 
     // '<ROOT>', base for the generic value topics
-    _mqttApplyTopic(placeholders.replace(mqtt::settings::topic()));
+    _mqttApplyRootTopic(placeholders.replace(mqtt::settings::topic()));
 
     // Getter and setter
     _mqttApplySuffix(
@@ -1083,7 +1140,19 @@ void _mqttConfigure() {
         _mqttApplyJson(std::move(json));
     }
 
-    // MQTT options
+    // MQTT Settings
+    {
+        auto settings = mqtt::settings::topicSettings();
+        if (settings.length()) {
+            settings = placeholders.replace(std::move(settings));
+        } else {
+            settings = mqttTopicSetter(mqtt::build::TopicSettings.toString());
+        }
+
+        _mqttApplySettingsTopic(std::move(settings));
+    }
+
+    // Rest of the MQTT connection settings
     _mqttApplySetting(_mqtt_settings.user,
         placeholders.replace(mqtt::settings::user()));
     _mqttApplySetting(_mqtt_settings.pass,
@@ -1254,6 +1323,7 @@ void _mqttWebSocketOnConnected(JsonObject& root) {
     root[Password] = mqtt::settings::password();
 
     root[Topic] = mqtt::settings::topic();
+
     root[Json] = mqtt::settings::json();
     root[TopicJson] = mqtt::settings::topicJson();
 
@@ -1339,6 +1409,10 @@ void _mqttCommandsSetup() {
 
 namespace {
 
+espurna::StringView _mqttMagnitude(const String& filter, espurna::StringView topic) {
+    return espurna::mqtt::match_wildcard(filter, topic, WildcardCharacter);
+}
+
 void _mqttCallback(unsigned int type, espurna::StringView topic, espurna::StringView payload) {
     if (type == MQTT_CONNECT_EVENT) {
         mqttSubscribe(MQTT_TOPIC_ACTION);
@@ -1349,6 +1423,31 @@ void _mqttCallback(unsigned int type, espurna::StringView topic, espurna::String
         if (t.equals(MQTT_TOPIC_ACTION)) {
             rpcHandleAction(payload);
         }
+    }
+}
+
+void _mqttSettingsCallback(unsigned int type, espurna::StringView topic, espurna::StringView payload) {
+    if (!_mqtt_subscribe_settings) {
+        return;
+    }
+
+    if (type == MQTT_CONNECT_EVENT) {
+        mqttSubscribeRaw(
+            _mqtt_settings_topic.c_str(),
+            _mqtt_settings.qos);
+    }
+
+    if (type == MQTT_MESSAGE_EVENT) {
+        if (!_mqtt_settings_topic.length()) {
+            return;
+        }
+
+        auto key = espurna::mqtt::match_wildcard(_mqtt_settings_topic, topic, '+');
+        if (!key.length()) {
+            return;
+        }
+
+        setSetting(key.toString(), payload.toString());
     }
 }
 
@@ -1631,69 +1730,8 @@ void _mqttOnMessage(char* topic, char* payload, unsigned int len) {
 // -----------------------------------------------------------------------------
 
 // Return {magnitude} (aka #) part of the topic string
-// e.g.
-// * <TOPIC>/#/set - generic topic placement
-//           ^
-// * <LHS>/#/<RHS>/set - when {magnitude} is used
-//         ^
-// * #/<RHS>/set - when magnitude is at the start
-//   ^
-// * #/set - when *only* {magnitude} is used (or, empty topic string)
-//   ^
-// Depends on the topic and setter settings values.
-// Note that function is ignoring the fact that these strings may not contain the
-// root topic b/c MQTT handles that instead of us (and it's good idea to trust it).
 espurna::StringView mqttMagnitude(espurna::StringView topic) {
-    using espurna::StringView;
-    StringView out;
-
-    const auto pattern = _mqtt_settings.topic + _mqtt_setter;
-    auto it = std::find(pattern.begin(), pattern.end(), '#');
-    if (it == pattern.end()) {
-        return out;
-    }
-
-    const auto start = StringView(pattern.begin(), it);
-    if (start.length()) {
-        topic = StringView(topic.begin() + start.length(), topic.end());
-    }
-
-    const auto end = StringView(it + 1, pattern.end());
-    if (end.length()) {
-        topic = StringView(topic.begin(), topic.end() - end.length());
-    }
-
-    out = StringView(topic.begin(), topic.end());
-    return out;
-}
-
-// Creates a proper MQTT topic for on the given 'magnitude'
-static String _mqttTopicWith(String magnitude) {
-    String out;
-    out.reserve(magnitude.length()
-        + _mqtt_settings.topic.length()
-        + _mqtt_setter.length()
-        + _mqtt_getter.length());
-
-    out += _mqtt_settings.topic;
-    out.replace("#", magnitude);
-
-    return out;
-}
-
-// When magnitude is a status topic aka getter
-static String _mqttTopicGetter(String magnitude) {
-    return _mqttTopicWith(magnitude) + _mqtt_getter;
-}
-
-// When magnitude is an input topic aka setter
-String _mqttTopicSetter(String magnitude) {
-    return _mqttTopicWith(magnitude) + _mqtt_setter;
-}
-
-// When magnitude is indexed, append its index to the topic
-static String _mqttTopicIndexed(String topic, size_t index) {
-    return topic + '/' + String(index, 10);
+    return _mqttMagnitude(_mqttTopicFilter(), topic);
 }
 
 String mqttTopic(const String& magnitude) {
@@ -2181,6 +2219,7 @@ void mqttSetup() {
         });
 
     mqttRegister(_mqttCallback);
+    mqttRegister(_mqttSettingsCallback);
 
     #if WEB_SUPPORT
         wsRegister()

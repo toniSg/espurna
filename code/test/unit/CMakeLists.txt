@@ -210,6 +210,7 @@ build_tests(
     basic
     embedis
     filters
+    mqtt
     scheduler
     settings
     terminal
