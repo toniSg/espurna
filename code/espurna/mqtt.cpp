@@ -1664,7 +1664,7 @@ void _mqttOnMessageAsync(char* raw_topic, char* raw_payload, AsyncMqttClientMess
     static constexpr size_t BufferSize { MQTT_BUFFER_MAX_SIZE };
     static_assert(BufferSize > 0, "");
 
-    if (!len || (len > BufferSize) || (total > BufferSize)) {
+    if ((len > BufferSize) || (total > BufferSize)) {
         return;
     }
 
@@ -1684,7 +1684,7 @@ void _mqttOnMessageAsync(char* raw_topic, char* raw_payload, AsyncMqttClientMess
     }
 
     buffer[len + index] = '\0';
-    if (len < mqtt::build::MessageLogMax) {
+    if (len > 0 || len < mqtt::build::MessageLogMax) {
         DEBUG_MSG_P(PSTR("[MQTT] Received %.*s => %s\n"),
             topic.length(), topic.data(), buffer);
     } else {
@@ -1708,7 +1708,7 @@ void _mqttOnMessage(char* raw_topic, char* raw_payload, unsigned int len) {
 
     auto message = espurna::StringView{ payload, len };
 
-    if (len < mqtt::build::MessageLogMax) {
+    if (len > 0 || len < mqtt::build::MessageLogMax) {
         DEBUG_MSG_P(PSTR("[MQTT] Received %.*s => %.*s\n"),
             topic.length(), topic.data(),
             message.length(), message.data());
