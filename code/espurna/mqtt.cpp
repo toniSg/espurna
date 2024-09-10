@@ -2054,14 +2054,14 @@ void _mqttConnect() {
     _mqtt_reconnect_delay =
         mqtt::reconnect::next(_mqtt_reconnect_delay);
 
-    // Attempt to perform MDNS discovery when configuration was only partially successful
+    // Attempt MDNS discovery when configuration was only partially successful
 #if MDNS_SERVER_SUPPORT
-    if (_mqtt_error == ErrMDNS) {
+    if (_mqtt_error && _mqtt_error == ErrMDNS) {
         _mqttMdnsDiscovery();
     }
 #endif
 
-    // Do not connect if configuration was not clean
+    // Do not connect when configuration was not successful
     if (_mqtt_error) return;
 
     _mqtt_state = AsyncClientState::Connecting;
