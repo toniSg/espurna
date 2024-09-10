@@ -889,10 +889,49 @@ bool _mqttConnectSyncClient(bool secure = false) {
 #endif // (MQTT_LIBRARY == MQTT_LIBRARY_ARDUINOMQTT) || (MQTT_LIBRARY == MQTT_LIBRARY_PUBSUBCLIENT)
 
 #if MDNS_SERVER_SUPPORT
+bool _mqtt_mdns_discovery { false };
 
-void _mqttMdnsSchedule();
-void _mqttMdnsStop();
+String _mqtt_mdns_server;
+uint16_t _mqtt_mdns_port;
 
+void _mqttConfigure();
+
+void _mqttMdnsDiscovery() {
+    if (!mdnsRunning() || _mqtt_settings.server.length()) {
+        _mqtt_mdns_discovery = false;
+        return;
+    }
+
+    DEBUG_MSG_P(PSTR("[MQTT] Querying MDNS service _mqtt._tcp\n"));
+    auto found = mdnsServiceQuery(
+        STRING_VIEW("mqtt").toString(),
+        STRING_VIEW("tcp").toString(),
+        [](String&& server, uint16_t port) {
+            _mqtt_mdns_server = std::move(server);
+            _mqtt_mdns_port = port;
+
+            DEBUG_MSG_P(PSTR("[MQTT] MDNS found broker at %s:%hu\n"),
+                _mqtt_mdns_server.c_str(), _mqtt_mdns_port);
+
+            return true;
+        });
+
+    if (found) {
+        setSetting(
+            mqtt::settings::keys::Server,
+            _mqtt_mdns_server);
+        setSetting(
+            mqtt::settings::keys::Port,
+            _mqtt_mdns_port);
+
+        _mqttConfigure();
+
+        _mqtt_mdns_server = String();
+        _mqtt_mdns_port = 0;
+
+        _mqtt_mdns_discovery = false;
+    }
+}
 #endif
 
 void _mqttConfigure() {
@@ -908,18 +947,10 @@ void _mqttConfigure() {
         _mqttApplySetting(_mqtt_settings.port, mqtt::settings::port());
         _mqttApplySetting(_mqtt_enabled, mqtt::settings::enabled());
 
-        // Optionally, support dynamic server configuration through MDNS
-#if MDNS_SERVER_SUPPORT
-        if (!_mqtt_enabled) {
-            _mqttMdnsStop();
-        }
-#endif
-
         if (!_mqtt_settings.server.length()) {
 #if MDNS_SERVER_SUPPORT
-            // But, start mdns discovery when it would've been enabled
             if (_mqtt_enabled && mqtt::settings::autoconnect()) {
-                _mqttMdnsSchedule();
+                _mqtt_mdns_discovery = true;
             }
 #endif
             _mqtt_settings.ok = false;
@@ -990,46 +1021,6 @@ void _mqttConfigure() {
     // Skip messages for the specified time after connecting
     _mqtt_skip_time = mqtt::settings::skipTime();
 }
-
-#if MDNS_SERVER_SUPPORT
-
-constexpr auto MqttMdnsDiscoveryInterval = espurna::duration::Seconds(15);
-espurna::timer::SystemTimer _mqtt_mdns_discovery;
-
-void _mqttMdnsStop() {
-    _mqtt_mdns_discovery.stop();
-}
-
-void _mqttMdnsDiscovery();
-
-void _mqttMdnsSchedule() {
-    _mqtt_mdns_discovery.schedule_once(MqttMdnsDiscoveryInterval, _mqttMdnsDiscovery);
-}
-
-void _mqttMdnsDiscovery() {
-    if (mdnsRunning()) {
-        DEBUG_MSG_P(PSTR("[MQTT] Querying MDNS service _mqtt._tcp\n"));
-        auto found = mdnsServiceQuery(
-            STRING_VIEW("mqtt").toString(),
-            STRING_VIEW("tcp").toString(),
-            [](String&& server, uint16_t port) {
-                DEBUG_MSG_P(PSTR("[MQTT] MDNS found broker at %s:%hu\n"), server.c_str(), port);
-                setSetting(mqtt::settings::keys::Server, server);
-                setSetting(mqtt::settings::keys::Port, port);
-                return true;
-            });
-
-        if (found) {
-            _mqttMdnsStop();
-            _mqttConfigure();
-            return;
-        }
-    }
-
-    _mqttMdnsSchedule();
-}
-
-#endif
 
 void _mqttSettingsMigrate(int version) {
     if (version < 4) {
@@ -1909,15 +1900,22 @@ void _mqttConnect() {
     // Do not connect if disabled or no WiFi
     if (!_mqtt_enabled || !_mqtt_network) return;
 
-    // Do not connect if configuration was not clean
-    if (!_mqtt_settings.ok) return;
-
     // Check reconnect interval
     if (!_mqtt_reconnect_flag) return;
 
     // Increase reconnect delay each attempt
     _mqtt_reconnect_delay =
         mqtt::reconnect::next(_mqtt_reconnect_delay);
+
+    // Attempt to perform MDNS discovery when configuration was only partially successful
+#if MDNS_SERVER_SUPPORT
+    if (_mqtt_mdns_discovery) {
+        _mqttMdnsDiscovery();
+    }
+#endif
+
+    // Do not connect if configuration was not clean
+    if (!_mqtt_settings.ok) return;
 
     _mqtt_state = AsyncClientState::Connecting;
 
