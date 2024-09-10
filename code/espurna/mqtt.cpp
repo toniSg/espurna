@@ -1706,9 +1706,11 @@ void _mqttOnMessageAsync(char* raw_topic, char* raw_payload, AsyncMqttClientMess
 
 void _mqttOnMessage(char* raw_topic, char* raw_payload, unsigned int len) {
     auto topic = espurna::StringView{ raw_topic };
-    if (_mqttMaybeSkipRetained(topic)) return;
+    if (_mqttMaybeSkipRetained(topic)) {
+        return;
+    }
 
-    auto message = espurna::StringView{ payload, len };
+    auto message = espurna::StringView{ raw_payload, len };
 
     if (len > 0 || len < mqtt::build::MessageLogMax) {
         DEBUG_MSG_P(PSTR("[MQTT] Received %.*s => %.*s\n"),
