@@ -1026,7 +1026,7 @@
 #endif
 
 #ifndef MQTT_RETAIN
-#define MQTT_RETAIN                 true            // MQTT retain flag
+#define MQTT_RETAIN                 1               // MQTT retain flag
 #endif
 
 #ifndef MQTT_QOS
@@ -1036,7 +1036,19 @@
 #endif
 
 #ifndef MQTT_KEEPALIVE
-#define MQTT_KEEPALIVE              120             // MQTT keep-alive interval (in seconds). 2 minutes by default. Cannot be zero.
+#define MQTT_KEEPALIVE              120             // MQTT Keep Alive time, in seconds.
+                                                    // Maximum amount of time without any communication between the server and the client before closing the connection.
+                                                    // From client side, handled internally by counting amount of time between control packets and / or PINGREQ & PINGRESP.
+                                                    // From server side, depends on the implementation (usually, also adds +50% of the original value)
+                                                    // 2 minutes by default. Can be zero. Small values 1..5 *may* not be handled properly.
+#endif
+
+#ifndef MQTT_CLEAN_SESSION
+#define MQTT_CLEAN_SESSION          0               // MQTT Clean Session flag.
+                                                    // When disabled, server is expected to persist subscriptions and not-yet-delivered messages w/ QoS > 0 for the specified Client Id.
+                                                    // (and *may* also store messages w/ QoS == 0, depends on the implementation)
+                                                    // When enabled, any previously stored session data is discarded.
+                                                    // Disabled by default.
 #endif
 
 #ifndef MQTT_SKIP_TIME
