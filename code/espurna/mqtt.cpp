@@ -1042,8 +1042,6 @@ void _mqttMdnsDiscovery() {
             mqtt::settings::keys::Port,
             _mqtt_mdns_port);
 
-        _mqttConfigure();
-
         _mqtt_mdns_server = String();
         _mqtt_mdns_port = 0;
 
@@ -1053,9 +1051,13 @@ void _mqttMdnsDiscovery() {
 #endif
 
 struct MqttConfigureGuard {
-    MqttConfigureGuard() {
-        _mqtt_reconnect_flag.stop();
-        _mqtt_reconnect_delay = 0;
+    explicit MqttConfigureGuard(bool reschedule) {
+        if (reschedule) {
+            _mqtt_reconnect_flag.stop();
+            _mqtt_reconnect_delay = 0;
+        }
+
+        _mqtt_settings.reconnect = false;
     }
 
     ~MqttConfigureGuard() {
@@ -1075,9 +1077,9 @@ struct MqttConfigureGuard {
     }
 };
 
-void _mqttConfigure() {
-    // Reset reconnect delay to reconnect sooner
-    MqttConfigureGuard _;
+void _mqttConfigureImpl(bool reschedule) {
+    // Generic enter and exit routines, declared externally
+    MqttConfigureGuard _(reschedule);
 
     // Before going through the settings, make sure there is SERVER:PORT to connect to
     _mqtt_error = ErrOk;
@@ -1178,6 +1180,10 @@ void _mqttConfigure() {
 
     // Skip messages for the specified time after connecting
     _mqtt_skip_time = mqtt::settings::skipTime();
+}
+
+void _mqttConfigure() {
+    _mqttConfigureImpl(true);
 }
 
 void _mqttSettingsMigrate(int version) {
@@ -1569,6 +1575,13 @@ void _mqttOnConnect() {
 }
 
 void _mqttScheduleConnect() {
+    _mqtt_reconnect_flag.wait(
+        mqtt::reconnect::delay(_mqtt_reconnect_delay));
+}
+
+void _mqttScheduleReconnect() {
+    _mqtt_reconnect_delay =
+        mqtt::reconnect::next(_mqtt_reconnect_delay);
     _mqtt_reconnect_flag.wait(
         mqtt::reconnect::delay(_mqtt_reconnect_delay));
 }
@@ -2051,24 +2064,31 @@ void _mqttConnect() {
     // Do not connect if disabled or no WiFi
     if (!_mqtt_enabled || !_mqtt_network) return;
 
-    // Check reconnect interval
+    // Check reconnect interval...
     if (!_mqtt_reconnect_flag) return;
 
-    // Increase reconnect delay each attempt
-    _mqtt_reconnect_delay =
-        mqtt::reconnect::next(_mqtt_reconnect_delay);
+    // ...and reschedule immediately when expired
+    _mqttScheduleReconnect();
 
-    // Attempt MDNS discovery when configuration was only partially successful
+    // Perform MDNS discovery before attempting reconfiguration
 #if MDNS_SERVER_SUPPORT
     if (_mqtt_error && _mqtt_error == ErrMDNS) {
         _mqttMdnsDiscovery();
     }
 #endif
 
-    // Do not connect when configuration was not successful
-    if (_mqtt_error) return;
+    // Attempt to reconfigure when configuration was previously unsuccessful
+    if (_mqtt_error) {
+        _mqttConfigureImpl(false);
+    }
+
+    // Do not continue if the error is still there
+    if (_mqtt_error) {
+        return;
+    }
 
     _mqtt_state = AsyncClientState::Connecting;
+    _mqttStopConnect();
 
     DEBUG_MSG_P(PSTR("[MQTT] Connecting to broker at %s:%hu\n"),
             _mqtt_settings.server.c_str(), _mqtt_settings.port);
