@@ -742,13 +742,13 @@ void ReadyFlag::stop() {
     _ready = true;
 }
 
-constexpr auto PolledReadFlagHalfInterval =
-    duration::Milliseconds(std::numeric_limits<time::SystemClock::rep>::max() / 2);
+constexpr auto PolledReadFlagHalfInterval = time::SystemClock::duration::max() / 2;
 
 bool PolledReadyFlag::wait(duration::Milliseconds interval) {
     if (_ready) {
+        const auto now = time::SystemClock::now();
         _ready = false;
-        _until = time::SystemClock::now() + interval;
+        _until = now + interval;
         return true;
     }
 
@@ -762,11 +762,13 @@ void PolledReadyFlag::stop() {
 bool PolledReadyFlag::ready() {
     if (!_ready) {
         const auto now = time::SystemClock::now();
-        _ready = (now >= _until) && ((now - _until) < PolledReadFlagHalfInterval);
+        _ready = (now - _until) < PolledReadFlagHalfInterval;
     }
 
     return _ready;
 }
+
+template struct PolledFlag<time::CoreClock>;
 
 namespace {
 

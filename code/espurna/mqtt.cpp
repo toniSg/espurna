@@ -557,8 +557,13 @@ Placeholders make_placeholders() {
 espurna::duration::Milliseconds _mqtt_skip_time;
 espurna::ReadyFlag _mqtt_skip_flag;
 
-espurna::PolledReadyFlag _mqtt_reconnect_flag;
+espurna::PolledFlag<espurna::time::CoreClock> _mqtt_reconnect_flag;
 size_t _mqtt_reconnect_delay;
+
+bool _mqttReconnectWait() {
+    return _mqtt_reconnect_flag.wait(
+        mqtt::reconnect::delay(_mqtt_reconnect_delay));
+}
 
 bool _mqtt_enabled { mqtt::build::enabled() };
 bool _mqtt_network { false };
@@ -1073,7 +1078,7 @@ void _mqttMdnsDiscovery() {
 struct MqttConfigureGuard {
     explicit MqttConfigureGuard(bool reschedule) {
         if (reschedule) {
-            _mqtt_reconnect_flag.stop();
+            _mqtt_reconnect_flag.reset();
             _mqtt_reconnect_delay = 0;
         }
 
@@ -1573,7 +1578,7 @@ bool _mqttHeartbeat(espurna::heartbeat::Mask mask) {
 
 void _mqttOnConnect() {
     _mqtt_reconnect_delay = 0;
-    _mqtt_reconnect_flag.stop();
+    _mqtt_reconnect_flag.reset();
 
     if (_mqtt_skip_time > _mqtt_skip_time.zero()) {
         _mqtt_skip_flag.wait(_mqtt_skip_time);
@@ -1597,19 +1602,17 @@ void _mqttOnConnect() {
 }
 
 void _mqttScheduleConnect() {
-    _mqtt_reconnect_flag.wait(
-        mqtt::reconnect::delay(_mqtt_reconnect_delay));
+    _mqtt_reconnect_flag.reset();
 }
 
 void _mqttScheduleReconnect() {
     _mqtt_reconnect_delay =
         mqtt::reconnect::next(_mqtt_reconnect_delay);
-    _mqtt_reconnect_flag.wait(
-        mqtt::reconnect::delay(_mqtt_reconnect_delay));
+    _mqtt_reconnect_flag.reset();
 }
 
 void _mqttStopConnect() {
-    _mqtt_reconnect_flag.stop();
+    _mqtt_reconnect_flag.reset();
     _mqtt_skip_flag.stop();
 }
 
@@ -2087,7 +2090,7 @@ void _mqttConnect() {
     if (!_mqtt_enabled || !_mqtt_network) return;
 
     // Check reconnect interval...
-    if (!_mqtt_reconnect_flag) return;
+    if (!_mqttReconnectWait()) return;
 
     // ...and reschedule immediately when expired
     _mqttScheduleReconnect();
