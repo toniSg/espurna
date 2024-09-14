@@ -1086,7 +1086,7 @@ struct MqttConfigureGuard {
     }
 
     ~MqttConfigureGuard() {
-        if (_mqtt_settings.reconnect && !_mqtt_error) {
+        if (_mqtt_settings.reconnect || _mqtt_error) {
             if (_mqtt.connected()) {
                 mqttDisconnect();
             }
