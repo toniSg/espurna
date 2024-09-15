@@ -1014,6 +1014,15 @@ void event(::terminal::CommandContext&& ctx) {
             return;
         }
 
+        if (!last_actions.empty()) {
+            ctx.output.print(PSTR("Calendar events:\n"));
+            for (auto& entry : last_actions) {
+                ctx.output.printf_P(PSTR("- cal#%zu at %s\n"),
+                    entry.index,
+                    format_last_action(entry).c_str());
+            }
+        }
+
 #if SCHEDULER_SUN_SUPPORT
         ctx.output.print(PSTR("Sun events:\n"));
         internal::dump_sunrise_sunset(ctx);
