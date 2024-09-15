@@ -93,6 +93,7 @@ private:
 
 #include <espurna/utils.h>
 #include <espurna/scheduler_common.ipp>
+#include <espurna/scheduler_sun.ipp>
 #include <espurna/scheduler_time.re.ipp>
 
 #include <ctime>
@@ -1411,6 +1412,38 @@ void test_search_bits() {
     TEST_ASSERT_FALSE(future.test(11));
 }
 
+void test_sun() {
+    // 1970-01-01 - prime meridian
+    sun::Location location;
+    location.latitude = 0.0;
+    location.longitude = 0.0;
+    location.altitude = 0.0;
+
+    constexpr auto date = datetime::Date{
+        .year = 1970, .month = 1, .day = 1,
+    };
+
+    const auto ctx = datetime::make_context(0);
+    const auto result =
+        sun::sunrise_sunset(location, ctx.utc);
+
+    auto expected = datetime::DateHhMmSs{
+        .year = date.year, .month = date.month, .day = date.day,
+        .hours = 5, .minutes = 59, .seconds = 54};
+    TEST_ASSERT(event::is_valid(result.sunrise));
+    TEST_ASSERT_EQUAL(
+        datetime::to_seconds(expected, true).count(),
+        result.sunrise.time_since_epoch().count());
+
+    expected = datetime::DateHhMmSs{
+        .year = date.year, .month = date.month, .day = date.day,
+        .hours = 18, .minutes = 7, .seconds = 8};
+    TEST_ASSERT(event::is_valid(result.sunset));
+    TEST_ASSERT_EQUAL(
+        datetime::to_seconds(expected, true).count(),
+        result.sunset.time_since_epoch().count());
+}
+
 void test_datetime_parsing() {
     datetime::DateHhMmSs parsed{};
     bool utc { false };
@@ -1504,6 +1537,7 @@ int main(int, char**) {
     RUN_TEST(test_schedule_parsing_weekdays);
     RUN_TEST(test_schedule_parsing_weekdays_range);
     RUN_TEST(test_search_bits);
+    RUN_TEST(test_sun);
     RUN_TEST(test_time_impl);
     RUN_TEST(test_time_invalid_parsing);
     RUN_TEST(test_time_parsing);

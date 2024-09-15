@@ -60,6 +60,12 @@ is preserved.
 
 #include "scheduler_common.ipp"
 
+#if defined(ESP8266) && !defined(HOST_MOCK)
+#ifndef SCHEDULER_SUN_EMBEDDED_CMATH
+#define SCHEDULER_SUN_EMBEDDED_CMATH 1
+#endif
+#endif
+
 namespace espurna {
 namespace scheduler {
 namespace {
@@ -76,7 +82,7 @@ constexpr double NegativeNaN { -NaN };
 
 namespace math {
 
-#if 1
+#if SCHEDULER_SUN_EMBEDDED_CMATH
 // ref. https://dsp.stackexchange.com/a/17276 by Robert Bristow-Johnson
 // effectively a float algorithm, but more than good enough for this case
 float atan(float x) {
@@ -168,8 +174,8 @@ double sqrt(double x) {
     return std::sqrt(x);
 }
 
-double fmod(double x) {
-    return std::fmod(x);
+double fmod(double x, double y) {
+    return std::fmod(x, y);
 }
 
 #endif
