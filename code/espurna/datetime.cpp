@@ -182,6 +182,10 @@ Seconds to_seconds(const DateHhMmSs& datetime, bool utc) noexcept {
     return Seconds{ mktime(&c_value) };
 }
 
+Clock::time_point make_time_point(const DateHhMmSs& datetime, bool utc) noexcept {
+    return Clock::time_point(to_seconds(datetime, utc));
+}
+
 Context make_context(Seconds seconds) {
     return make_context(seconds.count());
 }
