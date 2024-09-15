@@ -795,22 +795,26 @@ void test_event_impl() {
     static_assert(std::is_same_v<datetime::Clock::duration, datetime::Seconds>, "");
     static_assert(std::is_same_v<event::time_point, datetime::Clock::time_point>, "");
     const auto now = datetime::Clock::now();
-
     TEST_ASSERT(event::is_valid(now));
 
-    const auto minutes = to_minutes(now);
+    const auto ctx = datetime::make_context(now);
+    const auto time_point =
+        event::make_time_point(ctx);
+    TEST_ASSERT(event::is_valid(time_point));
+
+    const auto minutes = to_minutes(time_point);
     static_assert(std::is_same_v<decltype(minutes), const datetime::Minutes>, "");
 
-    const auto seconds = (now - minutes).time_since_epoch();
+    const auto seconds = (time_point - minutes).time_since_epoch();
     static_assert(std::is_same_v<decltype(seconds), const datetime::Seconds>, "");
 
-    TEST_ASSERT_EQUAL(0, event::difference((now - seconds), now).count());
+    TEST_ASSERT_EQUAL(0, event::difference((time_point - seconds), time_point).count());
 
-    const auto one = now + datetime::Minutes(55);
-    TEST_ASSERT_EQUAL(55, event::difference(one, now).count());
+    const auto one = time_point + datetime::Minutes(55);
+    TEST_ASSERT_EQUAL(55, event::difference(one, time_point).count());
 
-    const auto two = now - datetime::Minutes(55);
-    TEST_ASSERT_EQUAL(-55, event::difference(two, now).count());
+    const auto two = time_point - datetime::Minutes(55);
+    TEST_ASSERT_EQUAL(-55, event::difference(two, time_point).count());
 }
 
 void test_event_parsing() {

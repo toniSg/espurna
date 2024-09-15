@@ -190,6 +190,10 @@ Context make_context(Seconds seconds) {
     return make_context(seconds.count());
 }
 
+Context make_context(Clock::time_point time_point) {
+    return make_context(time_point.time_since_epoch());
+}
+
 Context make_context(time_t timestamp) {
     Context out;
     out.timestamp = timestamp;
