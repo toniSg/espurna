@@ -252,7 +252,6 @@ constexpr datetime::Seconds to_seconds(const datetime::Context& ctx) noexcept {
 
 // generates local and utc tm context for the given timestamp
 Context make_context(Clock::time_point);
-Context make_context(Seconds);
 Context make_context(time_t);
 
 // set target tm to 00:00 and offset N days in the future or past
@@ -279,8 +278,13 @@ String format(const tm&);
 String format_local(time_t);
 String format_utc(time_t);
 
+// prepare 'time_point' for the formatter
+String format_local(Clock::time_point);
+String format_utc(Clock::time_point);
+
 // generic iso8601 format w/ timezone offset
 String format_local_tz(const Context&);
+String format_local_tz(Clock::time_point);
 String format_local_tz(time_t);
 
 String format_utc_tz(const Context&);

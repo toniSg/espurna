@@ -137,7 +137,7 @@ bool named_event(String name, StringView value) {
 }
 
 String format_time_point(datetime::Clock::time_point time_point) {
-    return datetime::format_local_tz(time_point.time_since_epoch().count());
+    return datetime::format_local_tz(time_point);
 }
 
 String format_named_event(const NamedEvent& event) {
@@ -874,8 +874,7 @@ void update(time_t timestamp, const tm& today, T&& compare) {
 }
 
 String format_match(const EventMatch& match) {
-    return datetime::format_local_tz(
-        datetime::make_context(match.next.time_since_epoch()));
+    return datetime::format_local_tz(match.next);
 }
 
 // check() needs current or future events, discard timestamps in the past

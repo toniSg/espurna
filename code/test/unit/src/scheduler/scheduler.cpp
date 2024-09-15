@@ -960,7 +960,8 @@ void test_expect_today() {
     constexpr auto thirty_m = datetime::Minutes(30);
     sch.time.minute.set(ctx.utc.tm_min);
 
-    const auto next = datetime::Seconds(ReferenceTimestamp) - nine_h + thirty_m;
+    const auto next = datetime::make_time_point(
+        datetime::Seconds(ReferenceTimestamp) - nine_h + thirty_m);
     ctx = datetime::make_context(next);
 
     TEST_ASSERT(handle_today(expect, 791, sch));

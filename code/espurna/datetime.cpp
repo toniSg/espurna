@@ -249,11 +249,19 @@ String format_local(time_t timestamp) {
     return format(tmp);
 }
 
+String format_local(Clock::time_point time_point) {
+    return format_local(time_point.time_since_epoch().count());
+}
+
 // retrieve utc time struct from timestamp and format it
 String format_utc(time_t timestamp) {
     tm tmp;
     gmtime_r(&timestamp, &tmp);
     return format(tmp) + 'Z';
+}
+
+String format_utc(Clock::time_point time_point) {
+    return format_utc(time_point.time_since_epoch().count());
 }
 
 // time string plus offset from UTC
@@ -269,6 +277,10 @@ String format_local_tz(const Context& ctx) {
 
 String format_local_tz(time_t timestamp) {
     return format_local_tz(make_context(timestamp));
+}
+
+String format_local_tz(Clock::time_point time_point) {
+    return format_local_tz(make_context(time_point));
 }
 
 // aka "Zulu time" or "Zulu meridian", shorter version of +00:00
