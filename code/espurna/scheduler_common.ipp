@@ -981,6 +981,14 @@ constexpr datetime::Minutes difference(const datetime::Context& ctx, time_point 
     return difference(ctx, to_minutes(rhs));
 }
 
+constexpr bool greater(datetime::Clock::time_point lhs, datetime::Clock::time_point rhs) {
+    return to_minutes(lhs) > to_minutes(rhs);
+}
+
+constexpr bool less(datetime::Clock::time_point lhs, datetime::Clock::time_point rhs) {
+    return to_minutes(lhs) < to_minutes(rhs);
+}
+
 } // namespace event
 
 using event::to_seconds;

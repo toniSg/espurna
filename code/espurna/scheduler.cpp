@@ -234,6 +234,8 @@ struct Match {
 Location location;
 Match match;
 
+auto next_update = event::DefaultTimePoint;
+
 void setup();
 
 void reset() {
@@ -825,41 +827,47 @@ bool update_schedule(Schedule& schedule) {
 }
 
 bool needs_update(datetime::Clock::time_point time_point) {
-    return (match.rising.next < time_point)
-        || (match.setting.next < time_point);
+    const auto next = event::is_valid(next_update);
+    if (next) {
+        return event::less(next_update, time_point);
+    }
+
+    return event::less(match.rising.next, time_point)
+        || event::less(match.setting.next, time_point);
 }
 
 template <typename T>
-void delta_compare(tm& out, datetime::Clock::time_point, T);
+datetime::Clock::time_point delta_compare(tm& out, datetime::Clock::time_point, T);
 
-void update(const datetime::Clock::time_point&, const tm& today) {
+void update(datetime::Clock::time_point, const tm& today) {
     const auto result = sun::sunrise_sunset(location, today);
     update_event_match(match.rising, result.sunrise);
     update_event_match(match.setting, result.sunset);
 }
 
 template <typename T>
-void update(const datetime::Clock::time_point& time_point, const tm& today, T compare) {
+void update(datetime::Clock::time_point time_point, const tm& today, T compare) {
     auto result = sun::sunrise_sunset(location, today);
-    if (!event::is_valid(result.sunrise) || !event::is_valid(result.sunset)) {
-        return;
-    }
 
-    if (compare(time_point, result.sunrise) || compare(time_point, result.sunset)) {
-        tm tmp;
+    const auto reset_sunrise =
+        !event::is_valid(result.sunrise) || compare(time_point, result.sunrise);
+
+    const auto reset_sunset =
+        !event::is_valid(result.sunset) || compare(time_point, result.sunset);
+
+    next_update = event::DefaultTimePoint;
+
+    tm tmp;
+    if (reset_sunrise || reset_sunset) {
         std::memcpy(&tmp, &today, sizeof(tmp));
-        delta_compare(tmp, time_point, compare);
+        next_update = delta_compare(tmp, time_point, compare);
 
         const auto other = sun::sunrise_sunset(location, tmp);
-        if (!event::is_valid(other.sunrise) || !event::is_valid(other.sunset)) {
-            return;
-        }
-
-        if (compare(time_point, result.sunrise)) {
+        if (reset_sunrise && event::is_valid(other.sunrise)) {
             result.sunrise = other.sunrise;
         }
 
-        if (compare(time_point, result.sunset)) {
+        if (reset_sunset && event::is_valid(other.sunset)) {
             result.sunset = other.sunset;
         }
     }
@@ -881,15 +889,16 @@ String format_match(const EventMatch& match) {
 // round to minutes when doing so as well, since std::greater<> would compare seconds
 struct CheckCompare {
     bool operator()(const event::time_point& lhs, const event::time_point& rhs) {
-        return to_minutes(lhs) > to_minutes(rhs);
+        return event::greater(lhs, rhs);
     }
 };
 
 template <>
-void delta_compare(tm& out, datetime::Clock::time_point time_point, CheckCompare) {
-    datetime::delta_utc(
-        out, time_point.time_since_epoch(),
-        datetime::Days{ 1 });
+datetime::Clock::time_point delta_compare(tm& out, datetime::Clock::time_point time_point, CheckCompare) {
+    return datetime::make_time_point(
+        datetime::delta_utc(
+            out, time_point.time_since_epoch(),
+            datetime::Days{ 1 }));
 }
 
 void update_after(const datetime::Context& ctx) {
