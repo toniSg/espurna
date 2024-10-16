@@ -105,7 +105,7 @@ class A02YYUSensor : public BaseSensor {
             {    
                 for (; n > 0; n--) 
                 {
-                    char c = _serial->read();
+                    uint8_t c = _serial->read();
 
                     if (_rxCount < _RX_LEN) {
                         _rx[_rxIndex] = c;
@@ -136,7 +136,7 @@ class A02YYUSensor : public BaseSensor {
 
         // ---------------------------------------------------------------------
 
-        char _rx[_RX_LEN];
+        uint8_t _rx[_RX_LEN];
         Stream* _serial { nullptr };
         double _distance = 0;
         uint8_t _rxIndex = 0;
