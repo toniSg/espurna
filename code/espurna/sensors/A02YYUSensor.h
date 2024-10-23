@@ -13,9 +13,6 @@
 #include "Arduino.h"
 #include "BaseSensor.h"
 
-#define _RX_LEN     16
-#define _RX_MASK    (_RX_LEN - 1)
-
 class A02YYUSensor : public BaseSensor {
 
     public:
@@ -77,16 +74,18 @@ class A02YYUSensor : public BaseSensor {
         // Protected
         // ---------------------------------------------------------------------
 
-        int _parse(uint8_t startIndex)
+        // Parse the frame buffer and verify the checksum, it returns either:
+        //   the measured distance value (in mm)
+        //   -1 out of sync
+        //   -2 invalid checksum
+        int _parse_frame()
         {
-            uint8_t i = startIndex;
-
-            if (_rx[i] != 0xff)
+            if (_frame[0] != 0xff)
                 return -1;
 
-            int vh = _rx[(i + 1) & _RX_MASK];
-            int vl = _rx[(i + 2) & _RX_MASK];
-            int cs = _rx[(i + 3) & _RX_MASK];
+            int vh = _frame[1];
+            int vl = _frame[2];
+            int cs = _frame[3];
 
             if (cs != ((0xff + vh + vl) & 0xff))
                 return -2;
@@ -96,53 +95,43 @@ class A02YYUSensor : public BaseSensor {
 
         void _read() {
 
-            int n;
+            int available = _serial->available();
 
-            _error = SENSOR_ERROR_OK;
-
-            // read all available bytes into rx circular buffer
-            while ((n = _serial->available()))
-            {    
-                for (; n > 0; n--) 
-                {
-                    uint8_t c = _serial->read();
-
-                    if (_rxCount < _RX_LEN) {
-                        _rx[_rxIndex] = c;
-                        _rxIndex = (_rxIndex + 1) & _RX_MASK;
-                        _rxCount++;
-                    } else {
-                        // overflow
-                        _error = SENSOR_ERROR_OTHER;
-                    }
-                }
-                yield();
-            }
-
-            while (_rxCount >= 4)
+            while (available) 
             {
-                int d = _parse(_rdIndex);
+                // read bytes from the device into the frame buffer
+                int n = _serial->readBytes(_frame + _free, min(_frame_len - _free, available));
 
-                if (d > 0) {
-                    _rdIndex = (_rdIndex + 4) & _RX_MASK;
-                    _rxCount -= 4;
-                    _distance = d / 1000.0;
-                } else {
-                    _rdIndex = (_rdIndex + 1) & _RX_MASK;
-                    _rxCount--;
+                available -= n;
+                _free += n;
+                
+                if (_free == _frame_len) // the frame buffer is filled
+                {
+                    int d = _parse_frame();
+                    
+                    if (d >= 0)
+                    {
+                        // distance successfully parsed
+                        _distance = d / 1000.0;     // update the distance
+                        _free = 0;                  // empty the frame buffer
+                    } else {
+                        // out of sync or corrupted, shift the frame buffer by one byte
+                        for (int i = 0; i < _frame_len - 1; i++)
+                            _frame[i] = _frame[i + 1];
+
+                        _free = _frame_len - 1;
+                    }
                 }
             }
         }
 
         // ---------------------------------------------------------------------
 
-        uint8_t _rx[_RX_LEN];
+        static constexpr int _frame_len = 4;
+        uint8_t _frame[_frame_len];
         Stream* _serial { nullptr };
-        double _distance = 0;
-        uint8_t _rxIndex = 0;
-        uint8_t _rxCount = 0;
-        uint8_t _rdIndex = 0;
-        uint8_t _rdCount = 0;
+        double _distance = 0;           // measured distance
+        int _free = 0;                  // index of the first free byte in the frame buffer
 };
 
 #endif // SENSOR_SUPPORT && A02YYU_SUPPORT
