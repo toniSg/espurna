@@ -260,10 +260,10 @@
 // Enable sensors (values below may not be our default values!)
 //--------------------------------------------------------------------------------
 
+//#define A02YYU_SUPPORT 1
 //#define ADE7953_SUPPORT 1
 //#define AM2320_SUPPORT 1
 //#define ANALOG_SUPPORT 1
-//#define A02YYU_SUPPORT 1
 //#define BH1750_SUPPORT 1
 //#define BME680_SUPPORT 1
 //#define BMP180_SUPPORT 1
